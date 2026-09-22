@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the article it implements the method for."
+title: "vmc-phi4-depinning: variant Monte Carlo solver for phi^4 depinning"
+type: software
+authors:
+  - family-names: Kolton
+    given-names: Alejandro B.
+  - family-names: Ferrero
+    given-names: Ezequiel E.
+  - family-names: Rosso
+    given-names: Alberto
+license: MIT
+repository-code: "https://github.com/droyktton/vmc-phi4-depinning"
+preferred-citation:
+  type: article
+  title: "Depinning free of the elastic approximation"
+  authors:
+    - family-names: Kolton
+      given-names: Alejandro B.
+    - family-names: Ferrero
+      given-names: Ezequiel E.
+    - family-names: Rosso
+      given-names: Alberto
+  journal: "Physical Review B"
+  volume: 108
+  issue: 17
+  article-number: 174201
+  year: 2023
+  month: 11
+  doi: "10.1103/PhysRevB.108.174201"
+  url: "https://doi.org/10.1103/PhysRevB.108.174201"
