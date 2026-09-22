@@ -1,19 +1,13 @@
-# phi4_vmc_min
+# vmc-phi4-depinning
 
-Minimal GPU implementation of the **variant Monte Carlo (VMC)** solver
-for depinning in the disordered phi^4 model, and of the driver that
-finds, for each disorder realization, the depinning field `h_d` and the
+GPU implementation of the **variant Monte Carlo (VMC)** solver for
+depinning in the disordered phi^4 model, and of the driver that finds,
+for each disorder realization, the depinning field `h_d` and the
 critical interface configuration at depinning.
 
-Reference: Ferrero, Kolton, et al., *"Depinning without the elastic
-approximation: pinch-off, overhangs and the structure factor"*,
-[arXiv:2306.13415](https://arxiv.org/abs/2306.13415).
-
-This is a trimmed-down version of a larger, multi-experiment codebase:
-everything not needed to reproduce that paper's algorithm and analysis
-(alternative Euler/Langevin dynamics, a different disorder model, an
-unrelated AC-pulse experiment, an OpenGL live viewer, OpenCV contour
-tooling, etc.) has been removed.
+Reference: A. B. Kolton, E. E. Ferrero, and A. Rosso, "Depinning free of
+the elastic approximation," Phys. Rev. B **108**, 174201 (2023)
+([arXiv:2306.13415](https://arxiv.org/abs/2306.13415)).
 
 ## Model
 
@@ -38,7 +32,9 @@ whole color updates in parallel on the GPU (`vmcop`), since each site's
 four neighbors always belong to the other color. Sweeps repeat until the
 mean residual velocity `d phi/dt` of the steady-state equation drops
 below a cutoff `epsilon = TOLVEL` (`find_next_metastable`), signalling
-that a metastable state has been reached.
+that a metastable state has been reached. (`velocity_phi()` normalizes
+the summed residual by `L`, not `L2`, so `TOLVEL` is a size-scaled
+cutoff rather than a literal per-site mean velocity.)
 
 `h_d` is located per sample by **bisection on h** (`find_depinning_field`
 in `main.cu`): for each trial field the interface is relaxed from a flat
@@ -55,8 +51,7 @@ magnetization-jump ("avalanche") statistics discussed in the paper.
 ## Build
 
 Requires the NVIDIA CUDA toolkit (`nvcc`) and a GPU. The counter-based
-RNG (`Random123/`, vendored, header-only) is the only third-party
-dependency — no `cufft`, `glut`/`GL`, or OpenCV are needed.
+RNG (`Random123/`, vendored, header-only) is the only dependency.
 
 ```
 make                       # builds ./phi4vmc with the default parameters
@@ -119,26 +114,12 @@ structure-factor and overhang analysis, run on the `critica_*.dat` files:
   `extrae_Sq_from_wall.gnu`, `extrae_Sq_and_w2_from_wall.gnu`: batch
   variants of the above over a directory of samples.
 
-These scripts predate this cleanup and use ad hoc file-naming
-conventions (e.g. `L<size>_<Delta>/critica_*.dat` directories) — check
-each script's header comment for its expected usage before running it.
-
-## Notes / things worth double-checking against the paper
-
-- `velocity_phi()` normalizes the summed residual by `L` (the linear
-  size), not `L2` (the site count), so `TOLVEL` is not literally a
-  per-site mean velocity but a size-scaled one. This matches the
-  original code that produced published results, so it was kept as-is
-  rather than "fixed" — but it's worth deciding deliberately if you
-  change `L` a lot and want `TOLVEL` to mean the same thing across sizes.
+Check each script's header comment for its expected file-naming
+convention before running it.
 
 ## Citing
 
-If you use this code, please cite the paper it implements the method for:
-
-> A. B. Kolton, E. E. Ferrero, and A. Rosso, "Depinning free of the
-> elastic approximation," Phys. Rev. B **108**, 174201 (2023).
-> https://doi.org/10.1103/PhysRevB.108.174201
+If you use this code, please cite:
 
 ```bibtex
 @article{PhysRevB.108.174201,
