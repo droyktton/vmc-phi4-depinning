@@ -51,7 +51,19 @@ typedef float REAL;
 #define TOLVEL 0.0001	// convergence cutoff epsilon on the mean DW velocity
 #endif
 
-#define MAXITERATIONS	1000000
+// safety cap on find_next_metastable's relaxation loop, in units of
+// "chop"-sweep blocks (e.g. with the usual chop=100, this is
+// MAXITERATIONS*100 sweeps): if the mean DW velocity hasn't reached
+// TOLVEL by then, the field is treated as depinning. The original
+// value (1000000, i.e. 1e8 sweeps) is, in practice, an unbounded wait:
+// at observed throughput this is on the order of tens of hours, far
+// beyond what any genuinely-converging (even critically slow) trial
+// has been seen to need -- empirically, convergence completes within
+// a few thousand sweeps (a few tens of iterations) even in slow,
+// near-critical cases. 5000 iterations (5e5 sweeps) keeps a >60x
+// margin above that while turning a genuinely non-converging trial
+// from an effectively unbounded wait into a bounded few-minutes one.
+#define MAXITERATIONS	5000
 
 /* counter-based random numbers, used both for the quenched disorder
    r(x,y) and to give every lattice site an independent, reproducible
