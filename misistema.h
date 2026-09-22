@@ -1,6 +1,6 @@
 // Variant Monte Carlo (VMC) solver for the disordered phi^4 depinning model.
 //
-// Model (Gonzalez Aragon / Kolton et al., arXiv:2306.13415):
+// Model (arXiv:2306.13415):
 //   dphi/dt = c*Laplacian(phi) + eps0*[(1+r(x,y))*phi - phi^3] + h
 // with r(x,y) uncorrelated random-bond disorder, uniform in [-Delta,Delta]
 // (Delta == AMPDIS), on an LxL grid, periodic in x and anti-periodic in y
