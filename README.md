@@ -123,6 +123,25 @@ strength `Delta`, rebuild with `make AMPDIS=<Delta>` before each batch
 (`Delta` is a compile-time constant, see [Model](#model)) and use a
 separate `--outdir` per `(L, Delta)`.
 
+`scripts/fit_roughness.py` fits the roughness exponent `zeta` from
+`S(q) ~ q^-(1+2*zeta)` over a chosen low-`q` range of
+`structure_factor.dat`:
+
+```
+python3 scripts/fit_roughness.py data/L128_D0.2/structure_factor.dat
+python3 scripts/fit_roughness.py data/L128_D0.2/structure_factor.dat --qmin 0.05 --qmax 0.2
+```
+
+With no `--qmin`/`--qmax`, it auto-picks the best-R² contiguous window
+in the low-`q` half of the data, but also prints the local
+(secant-slope) effective exponent between every pair of points so you
+can judge the fit range yourself — the paper's two roughness regimes
+(quenched-EW `zeta~1.2` below the crossover length `l_o`, versus
+invasion-percolation `zeta_eff~0.5` above it) mean the "best" window
+isn't always the physically relevant one, especially with modest `L`
+and sample counts. Use `--qmin`/`--qmax` to pin the fit to a specific
+range once you've picked one from the diagnostics.
+
 ### Overhang / structure-factor pipeline from the paper (gnuplot/awk/octave)
 
 The rest of `scripts/` has the original gnuplot/awk/octave pipeline used
