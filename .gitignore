@@ -2,3 +2,5 @@ phi4vmc
 *.o
 *.dat
 logfile.dat
+data/
+__pycache__/

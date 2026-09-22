@@ -98,8 +98,36 @@ done
 
 ## Analysis
 
-`scripts/` has the gnuplot/awk/octave pipeline used for the paper's
-structure-factor and overhang analysis, run on the `critica_*.dat` files:
+### Depinning field statistics and structure factor (Python)
+
+`scripts/run_batch.py` runs `./phi4vmc` over many disorder seeds for a
+fixed `(L, h_low, h_high, tol)` and collects `h_d` per seed into a CSV;
+`scripts/analyze_hd.py` then reports the mean/variance/std of `h_d` and
+plots its histogram, and `scripts/structure_factor.py` computes the
+sample-averaged structure factor `S(q)` of the critical domain-wall
+configurations. Requires `numpy` and `matplotlib`.
+
+```
+make
+python3 scripts/run_batch.py --binary ./phi4vmc --L 128 \
+    --h-low 0 --h-high 0.05 --tol 1e-4 --nsamples 40 --outdir data/L128_D0.2
+
+python3 scripts/analyze_hd.py data/L128_D0.2/hd_summary.csv
+python3 scripts/structure_factor.py data/L128_D0.2 --L 128
+```
+
+`analyze_hd.py` writes `<summary>_stats_histogram.dat`/`.png`;
+`structure_factor.py` writes `structure_factor.dat`/`.png` (columns
+`q`, mean `S(q)`, standard error) in `--outdir`. To sweep the disorder
+strength `Delta`, rebuild with `make AMPDIS=<Delta>` before each batch
+(`Delta` is a compile-time constant, see [Model](#model)) and use a
+separate `--outdir` per `(L, Delta)`.
+
+### Overhang / structure-factor pipeline from the paper (gnuplot/awk/octave)
+
+The rest of `scripts/` has the original gnuplot/awk/octave pipeline used
+for the paper's structure-factor and overhang analysis, run on the
+`critica_*.dat` files:
 
 - `tiene_overhang.awk`: classifies a critical configuration as having
   overhangs or not, and reports the roughness of its (single-valued)
