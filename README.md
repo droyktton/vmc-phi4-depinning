@@ -153,9 +153,34 @@ every sample as a small subplot.
 python3 scripts/plot_critical_configs.py data/L128_D0.2 --L 128 --grid
 ```
 
-(`scripts/wall_io.py` holds the wall-file parsing and height-profile
-code shared by `structure_factor.py` and `plot_critical_configs.py`;
-it's a library module, not meant to be run directly.)
+`scripts/detect_overhangs.py` detects multivalued (overhang) regions in
+each sample and reports their size relative to `L`: the fraction of
+columns that are multivalued (a per-sample estimate of the paper's
+overhang probability `rho`), the paper's overhang-size measure `u_o`
+(and `u_o/L`), and each individual overhang region's extent as a
+fraction of `L`. Run it on one file for a detailed report, or on a
+directory for a per-sample summary CSV plus sample-averaged statistics;
+`plot_critical_configs.py --highlight-overhangs` shades the same
+regions on the configuration plots.
+
+```
+python3 scripts/detect_overhangs.py data/L128_D0.2/critica_h0.008787_seed13.dat --L 128
+python3 scripts/detect_overhangs.py data/L128_D0.2 --L 128
+python3 scripts/plot_critical_configs.py data/L128_D0.2 --L 128 --grid --highlight-overhangs
+```
+
+Note: `is_wall_smooth`'s 5-point smoothing always spreads one genuine
+crossing over 2 (occasionally more) adjacent rows, so raw wall-point
+counts alone would flag *every* column as "multivalued". `detect_overhangs.py`
+first collapses same-column detections within `--merge-gap` rows
+(default 1) of each other into a single branch, so `--threshold`
+(default 2 branches) reflects genuinely separate crossings; the
+original `tiene_overhang.awk` used a threshold of 6 *raw* points, which
+is roughly 3 branches here.
+
+(`scripts/wall_io.py` holds the wall-file parsing, height-profile and
+overhang-detection code shared by the scripts above; it's a library
+module, not meant to be run directly.)
 
 ### Overhang / structure-factor pipeline from the paper (gnuplot/awk/octave)
 
