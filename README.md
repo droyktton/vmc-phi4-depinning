@@ -142,6 +142,21 @@ isn't always the physically relevant one, especially with modest `L`
 and sample counts. Use `--qmin`/`--qmax` to pin the fit to a specific
 range once you've picked one from the diagnostics.
 
+`scripts/plot_critical_configs.py` plots each sample's critical
+configuration: the raw (possibly multivalued, where there are
+overhangs) wall points, overlaid with the single-valued height profile
+`u(x)` used by `structure_factor.py`. One PNG per sample is written to
+`<datadir>/configs/`; pass `--grid` for a single overview figure with
+every sample as a small subplot.
+
+```
+python3 scripts/plot_critical_configs.py data/L128_D0.2 --L 128 --grid
+```
+
+(`scripts/wall_io.py` holds the wall-file parsing and height-profile
+code shared by `structure_factor.py` and `plot_critical_configs.py`;
+it's a library module, not meant to be run directly.)
+
 ### Overhang / structure-factor pipeline from the paper (gnuplot/awk/octave)
 
 The rest of `scripts/` has the original gnuplot/awk/octave pipeline used

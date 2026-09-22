@@ -16,7 +16,6 @@ Example:
 """
 import argparse
 import glob
-import re
 from pathlib import Path
 
 import matplotlib
@@ -24,42 +23,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-
-def read_wall_points(path):
-    """Returns arrays (x, y) of the wall coordinates in a critica_*.dat file."""
-    xs, ys = [], []
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            x, y = line.split()
-            xs.append(int(x))
-            ys.append(int(y))
-    return np.array(xs), np.array(ys)
-
-
-def height_profile(xs, ys, L):
-    """Single-valued, evenly-sampled height profile u(x), x=0..L-1."""
-    sums = np.zeros(L)
-    counts = np.zeros(L)
-    np.add.at(sums, xs, ys)
-    np.add.at(counts, xs, 1)
-
-    present = counts > 0
-    if not present.any():
-        raise ValueError("no wall points found")
-
-    u_present = sums[present] / counts[present]
-    x_present = np.nonzero(present)[0]
-
-    if present.all():
-        return u_present
-
-    # periodic linear interpolation to fill any x with no wall crossing
-    x_ext = np.concatenate([x_present - L, x_present, x_present + L])
-    u_ext = np.concatenate([u_present, u_present, u_present])
-    return np.interp(np.arange(L), x_ext, u_ext)
+from wall_io import read_wall_points, height_profile
 
 
 def structure_factor(u):
