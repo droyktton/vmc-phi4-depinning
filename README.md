@@ -104,6 +104,46 @@ for seed in $(seq 1 100); do
 done
 ```
 
+## Performance
+
+Cost grows steeply with `L`, dominated by trials near `h_d` where the
+physics itself relaxes slowly (critical slowing down) — not by the
+per-sweep GPU cost, which is cheap even at large `L`. Rough data points
+on a GTX 1080, one sample each:
+
+| `L`  | default run (no `--with-magjumps`) |
+|------|-------------------------------------|
+| 32   | < 1 s                                |
+| 128  | ~4 s                                 |
+| 1024 | ~4 min                               |
+
+Two things keep this bounded rather than unpredictable:
+
+- **`--with-magjumps` is off by default** (see [Run](#run)) — the
+  avalanche scan probes 100 fields all within 5% of `h_d`, i.e.
+  deliberately in the slow region, and was the dominant cost at large
+  `L` even after the fix below.
+- **`MAXITERATIONS`** (`misistema.h`) caps how long
+  `find_next_metastable` will wait for a trial field to either converge
+  (pinned) or be ruled out (depinning) before giving up — 5000
+  "chop"-sweep blocks (5×10⁵ sweeps), a >60x margin over the slowest
+  genuine convergence observed empirically. The original value (1e6
+  blocks, i.e. 1e8 sweeps) was, in practice, an unbounded wait — tens
+  of hours at observed throughput — which is what made `L=1024`/`2048`
+  runs hang indefinitely before this was tuned down.
+
+For much larger `L` (2048+), a single sample can still take tens of
+minutes or more; there's currently no way to know how long short of
+running it. A genuinely faster search (e.g. warm-starting from the
+previous trial's configuration instead of always restarting from a
+flat interface) was investigated but not adopted: for this disordered,
+multistable system, different starting conditions can converge to
+different, equally-stable metastable states at the same field, so a
+warm-started search can find a different `h_d` than the flat-restart
+one implemented here (confirmed directly on an `L=32` sample). Which
+branch "is" h_d is a genuine protocol question, not a bug — so the
+(slower, but validated) flat-restart bisection is kept as the default.
+
 ## Analysis
 
 ### Depinning field statistics and structure factor (Python)
