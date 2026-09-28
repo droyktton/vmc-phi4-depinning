@@ -61,13 +61,18 @@ make AMPDIS=0.4 CEL=1.0    # override disorder strength / elastic constant
 ## Run
 
 ```
-./phi4vmc L h_low h_high tol seed
+./phi4vmc L h_low h_high tol seed [--with-magjumps]
 ```
 
 - `L`: lattice size (must be even, for the checkerboard decomposition)
 - `h_low`, `h_high`: bisection bracket (must be pinned at `h_low`, depinned at `h_high`)
 - `tol`: bisection tolerance on `h_d` (the paper uses `1e-4`)
 - `seed`: disorder-realization seed
+- `--with-magjumps`: also scan 100 fields within 5% of `h_d` for
+  magnetization-jump ("avalanche") statistics. This probes deliberately
+  in the critical-slowing-down region, so it's comparatively expensive;
+  it's off by default since `h_d` and the critical configuration are
+  already fully determined without it.
 
 Example:
 
@@ -81,10 +86,13 @@ Per run, this writes:
   configuration, as `(x, y)` domain-wall coordinates.
 - `criticamag_h<h_d>_seed<seed>.dat` — the row/column magnetization
   profile of the critical configuration.
+- `logfile.dat` — the run's parameters.
+
+With `--with-magjumps`, it additionally writes:
+
 - `jumps_seed<seed>.dat` — magnetization jump vs. field near `h_d`.
 - `metas_seed<seed>.dat`, `metasmag_seed<seed>.dat` — the corresponding
   sequence of metastable interface configurations / profiles.
-- `logfile.dat` — the run's parameters.
 
 To collect statistics over many samples (the paper uses from tens to a
 couple hundred, depending on `L` and `Delta`), just loop over the seed in

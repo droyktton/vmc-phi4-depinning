@@ -16,10 +16,15 @@
 //
 // Around h_d, scan_magnetization_jumps() additionally records the
 // metastable-state sequence (magnetization jumps / "avalanches") on a
-// finer field grid.
+// finer field grid. This scan probes 100 fields all within 5% of h_d,
+// i.e. deliberately in the critical-slowing-down region, so it is
+// comparatively expensive; it is opt-in (--with-magjumps) since h_d
+// and the critical configuration are already fully determined and
+// saved by find_depinning_field() on its own.
 #include <iostream>
 #include <fstream>
 #include <cstdio>
+#include <string>
 #include "misistema.h"
 
 // bisects on h in [h_low,h_high] (tolerance tol) to find the depinning
@@ -102,21 +107,23 @@ void scan_magnetization_jumps(float h_low, float h_high, System *sys)
 
 int main(int argc, char **argv)
 {
-	int L; float h_low,h_high,tol; unsigned long disorder_seed;
-	if(argc==6){
+	int L; float h_low,h_high,tol; unsigned long disorder_seed; bool with_magjumps=false;
+	if(argc==6 || (argc==7 && std::string(argv[6])=="--with-magjumps")){
 		L=atoi(argv[1]);
 		h_low=atof(argv[2]);
 		h_high=atof(argv[3]);
 		tol=atof(argv[4]);
 		disorder_seed=strtoul(argv[5],NULL,10);
+		with_magjumps=(argc==7);
 	}
 	else{
-		std::cout << "usage: " << argv[0] << " L h_low h_high tol seed" << std::endl;
-		std::cout << "  L        lattice size (must be even)" << std::endl;
-		std::cout << "  h_low    lower bracket for the depinning field" << std::endl;
-		std::cout << "  h_high   upper bracket for the depinning field (must be pinned at h_low, depinned at h_high)" << std::endl;
-		std::cout << "  tol      bisection tolerance on h_d (paper uses 1e-4)" << std::endl;
-		std::cout << "  seed     disorder-realization seed" << std::endl;
+		std::cout << "usage: " << argv[0] << " L h_low h_high tol seed [--with-magjumps]" << std::endl;
+		std::cout << "  L               lattice size (must be even)" << std::endl;
+		std::cout << "  h_low           lower bracket for the depinning field" << std::endl;
+		std::cout << "  h_high          upper bracket for the depinning field (must be pinned at h_low, depinned at h_high)" << std::endl;
+		std::cout << "  tol             bisection tolerance on h_d (paper uses 1e-4)" << std::endl;
+		std::cout << "  seed            disorder-realization seed" << std::endl;
+		std::cout << "  --with-magjumps also run the (comparatively expensive) magnetization-jump scan near h_d" << std::endl;
 		std::cout << "example: " << argv[0] << " 256 0.0 0.1 0.0001 1234" << std::endl;
 		return 1;
 	}
@@ -126,7 +133,7 @@ int main(int argc, char **argv)
 	float hd = find_depinning_field(h_low, h_high, tol, &sys);
 	std::cout << "depinning field h_d = " << hd << std::endl;
 
-	scan_magnetization_jumps(hd*0.95, hd, &sys);
+	if(with_magjumps) scan_magnetization_jumps(hd*0.95, hd, &sys);
 
 	return 0;
 }

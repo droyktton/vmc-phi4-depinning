@@ -2,8 +2,9 @@
 """Runs ./phi4vmc over many disorder-realization seeds for a fixed
 (L, h_low, h_high, tol), collecting the per-sample depinning field h_d
 into a summary CSV. Each run's output files (critical configuration,
-avalanche statistics, ...) are kept in `outdir`, one run's files per
-seed (named after the seed, so nothing gets overwritten).
+and avalanche statistics if --with-magjumps is passed) are kept in
+`outdir`, one run's files per seed (named after the seed, so nothing
+gets overwritten).
 
 Note: the disorder strength Delta is a compile-time constant (AMPDIS in
 the Makefile), not a runtime argument -- rebuild with `make AMPDIS=...`
@@ -23,11 +24,11 @@ from pathlib import Path
 HD_LINE = re.compile(r"depinning field h_d = ([-\d.eE+]+)")
 
 
-def run_one(binary, L, h_low, h_high, tol, seed, cwd):
-    result = subprocess.run(
-        [str(binary), str(L), str(h_low), str(h_high), str(tol), str(seed)],
-        cwd=cwd, capture_output=True, text=True,
-    )
+def run_one(binary, L, h_low, h_high, tol, seed, cwd, with_magjumps=False):
+    cmd = [str(binary), str(L), str(h_low), str(h_high), str(tol), str(seed)]
+    if with_magjumps:
+        cmd.append("--with-magjumps")
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"seed {seed} failed (exit {result.returncode}):\n{result.stderr}"
@@ -48,6 +49,8 @@ def main():
     p.add_argument("--nsamples", type=int, required=True)
     p.add_argument("--seed-start", type=int, default=1)
     p.add_argument("--outdir", required=True)
+    p.add_argument("--with-magjumps", action="store_true",
+                    help="also run the magnetization-jump scan near h_d for each sample (see ./phi4vmc --help)")
     args = p.parse_args()
 
     binary = Path(args.binary).resolve()
@@ -73,7 +76,8 @@ def main():
             if seed in done_seeds:
                 print(f"seed {seed}: already done, skipping")
                 continue
-            hd = run_one(binary, args.L, args.h_low, args.h_high, args.tol, seed, cwd=outdir)
+            hd = run_one(binary, args.L, args.h_low, args.h_high, args.tol, seed, cwd=outdir,
+                         with_magjumps=args.with_magjumps)
             print(f"seed {seed}: h_d = {hd:.6f}")
             writer.writerow([seed, hd])
             f.flush()
