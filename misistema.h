@@ -291,7 +291,9 @@ class System{
 
 			d_phi = thrust::device_malloc<float>(L2);
 			phi_ptr = thrust::raw_pointer_cast(&d_phi[0]);
-			d_wall_site_indices = thrust::device_malloc<int>(L*10);
+			// every site can in principle be a wall site; L*10 could overflow
+			// for overhang-rich walls at strong disorder
+			d_wall_site_indices = thrust::device_malloc<int>(L2);
 
 			external_field=0.0;
 			total_time=0;
@@ -460,6 +462,15 @@ class System{
 
 			for(int i=0;i<L;i++) fout << mag_by_x[i] << " " << mag_by_y[i] << std::endl;
 			fout << "\n" << std::endl;
+		}
+
+		// raw float32 dump of the whole field, row-major (index x+y*L), for
+		// offline contour extraction (scripts/wall_contour.py); fout must be
+		// opened in binary mode
+		void print_field_binary(std::ofstream &fout)
+		{
+			thrust::host_vector<float> h_phi(d_phi,d_phi+L2);
+			fout.write(reinterpret_cast<const char*>(h_phi.data()),sizeof(float)*L2);
 		}
 
 		void print_config(std::ofstream &fout)

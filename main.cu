@@ -30,8 +30,10 @@
 // bisects on h in [h_low,h_high] (tolerance tol) to find the depinning
 // field h_d for the sample seeded by sys->disorder_seed. Saves the
 // critical configuration (critica_h..._seed....dat) and its
-// magnetization profile (criticamag_h..._seed....dat). Returns h_d.
-float find_depinning_field(float h_low, float h_high, float tol, System *sys)
+// magnetization profile (criticamag_h..._seed....dat), and, if
+// dump_field, the full field as raw float32 (criticafield_h..._seed....bin).
+// Returns h_d.
+float find_depinning_field(float h_low, float h_high, float tol, System *sys, bool dump_field)
 {
 	float a=h_low, b=h_high, mid;
 	int iteration=0;
@@ -66,6 +68,12 @@ float find_depinning_field(float h_low, float h_high, float tol, System *sys)
 	sprintf(filename,"criticamag_h%f_seed%lu.dat",a,sys->disorder_seed);
 	std::ofstream critical_mag_out(filename);
 	sys->print_magnetization_profile(critical_mag_out);
+
+	if(dump_field){
+		sprintf(filename,"criticafield_h%f_seed%lu.bin",a,sys->disorder_seed);
+		std::ofstream critical_field_out(filename,std::ios::binary);
+		sys->print_field_binary(critical_field_out);
+	}
 
 	return a;
 }
@@ -107,30 +115,37 @@ void scan_magnetization_jumps(float h_low, float h_high, System *sys)
 
 int main(int argc, char **argv)
 {
-	int L; float h_low,h_high,tol; unsigned long disorder_seed; bool with_magjumps=false;
-	if(argc==6 || (argc==7 && std::string(argv[6])=="--with-magjumps")){
+	int L; float h_low,h_high,tol; unsigned long disorder_seed;
+	bool with_magjumps=false, dump_field=false, bad_flag=false;
+	for(int i=6;i<argc;i++){
+		std::string flag(argv[i]);
+		if(flag=="--with-magjumps") with_magjumps=true;
+		else if(flag=="--dump-field") dump_field=true;
+		else bad_flag=true;
+	}
+	if(argc>=6 && !bad_flag){
 		L=atoi(argv[1]);
 		h_low=atof(argv[2]);
 		h_high=atof(argv[3]);
 		tol=atof(argv[4]);
 		disorder_seed=strtoul(argv[5],NULL,10);
-		with_magjumps=(argc==7);
 	}
 	else{
-		std::cout << "usage: " << argv[0] << " L h_low h_high tol seed [--with-magjumps]" << std::endl;
+		std::cout << "usage: " << argv[0] << " L h_low h_high tol seed [--with-magjumps] [--dump-field]" << std::endl;
 		std::cout << "  L               lattice size (must be even)" << std::endl;
 		std::cout << "  h_low           lower bracket for the depinning field" << std::endl;
 		std::cout << "  h_high          upper bracket for the depinning field (must be pinned at h_low, depinned at h_high)" << std::endl;
 		std::cout << "  tol             bisection tolerance on h_d (paper uses 1e-4)" << std::endl;
 		std::cout << "  seed            disorder-realization seed" << std::endl;
 		std::cout << "  --with-magjumps also run the (comparatively expensive) magnetization-jump scan near h_d" << std::endl;
+		std::cout << "  --dump-field    also save the critical field phi as raw float32 (L*L*4 bytes)" << std::endl;
 		std::cout << "example: " << argv[0] << " 256 0.0 0.1 0.0001 1234" << std::endl;
 		return 1;
 	}
 
 	System sys(L,disorder_seed);
 
-	float hd = find_depinning_field(h_low, h_high, tol, &sys);
+	float hd = find_depinning_field(h_low, h_high, tol, &sys, dump_field);
 	std::cout << "depinning field h_d = " << hd << std::endl;
 
 	if(with_magjumps) scan_magnetization_jumps(hd*0.95, hd, &sys);

@@ -56,12 +56,18 @@ RNG (`Random123/`, vendored, header-only) is the only dependency.
 ```
 make                       # builds ./phi4vmc with the default parameters
 make AMPDIS=0.4 CEL=1.0    # override disorder strength / elastic constant
+make AMPDIS=0.6 TARGET=phi4vmc_D0.6 ARCH=sm_86   # named binary, other GPU arch
 ```
+
+`ARCH` defaults to `sm_61` (GTX 10xx); set it to your GPU's compute
+capability (e.g. `sm_86` for RTX 30xx / A-series Ampere). `TARGET`
+lets one binary per `Delta` coexist; since `make` doesn't track the
+`-D` values, use `make -B` when rebuilding with a different `AMPDIS`.
 
 ## Run
 
 ```
-./phi4vmc L h_low h_high tol seed [--with-magjumps]
+./phi4vmc L h_low h_high tol seed [--with-magjumps] [--dump-field]
 ```
 
 - `L`: lattice size (must be even, for the checkerboard decomposition)
@@ -73,6 +79,8 @@ make AMPDIS=0.4 CEL=1.0    # override disorder strength / elastic constant
   in the critical-slowing-down region, so it's comparatively expensive;
   it's off by default since `h_d` and the critical configuration are
   already fully determined without it.
+- `--dump-field`: also save the whole critical field `phi` (see below),
+  needed for the arc-length analysis of `scripts/local_roughness.py`.
 
 Example:
 
@@ -87,6 +95,11 @@ Per run, this writes:
 - `criticamag_h<h_d>_seed<seed>.dat` — the row/column magnetization
   profile of the critical configuration.
 - `logfile.dat` — the run's parameters.
+
+With `--dump-field`, it additionally writes:
+
+- `criticafield_h<h_d>_seed<seed>.bin` — the critical field `phi` as raw
+  float32, `L*L` values, row-major (index `x + y*L`); 4 MB at `L=1024`.
 
 With `--with-magjumps`, it additionally writes:
 
@@ -229,6 +242,66 @@ is roughly 3 branches here.
 (`scripts/wall_io.py` holds the wall-file parsing, height-profile and
 overhang-detection code shared by the scripts above; it's a library
 module, not meant to be run directly.)
+
+### Local roughness exponent and crossover length (Python)
+
+These scripts compare ways of measuring the scale-dependent roughness
+exponent `zeta(l)` and the crossover length `l_o` between the
+self-affine qEW regime (`zeta ~ 1.25`) and the large-scale self-similar
+one. They work on the raw fields (`--dump-field`), not on the
+`critica_*.dat` points: those come from a detector that only finds sign
+changes along `y`, so it misses the vertical stretches of the wall
+(the overhangs) and gives unordered points. Instead
+`scripts/wall_contour.py` traces the `phi=0` line (sub-pixel marching
+squares, periodic in `x`) into an ordered curve. Requires `scipy` and
+`scikit-image`.
+
+`scripts/local_roughness.py` measures, per sample, and averages
+(bootstrap errors over samples):
+
+- global, on the univalued `u(x)` (paper Eq. 9): `S(q)`, `B(r)`, `W2(L)`;
+- local, on segments of arc length `l` rigidly rotated to their tilt,
+  with tilt = end-to-end chord and = principal axis (pca): `W2(l)`,
+  `B(r,l)`, `S(q,l)` (chord segments: FFT; pca segments: cosine
+  transform, `--pca-transform`); plus the fraction of
+  segments still multivalued in their own frame, the aspect ratio
+  `W(l)/l` and the rms tilt angle.
+
+From these it gets local exponents (log-derivatives), several
+definitions of `l_o` (local exponent dropping below `--zeta-th`,
+multivalued fraction reaching `--fmv-th`, and data collapse across
+`Delta` at fixed `L`), and fits `l_o ~ Delta^-alpha` (paper: ~2.2).
+
+```
+DELTAS="0.4 0.6 0.85 1.0" LS="256 512" NSAMPLES=30 ARCH=sm_86 scripts/sweep_disorder.sh
+python3 scripts/local_roughness.py data/sweep/L*_D* --outdir data/sweep/analysis
+```
+
+`scripts/sweep_disorder.sh` builds one binary per `Delta` and runs
+`run_batch.py --dump-field` into `data/sweep/L<L>_D<Delta>/`. Outputs of
+`local_roughness.py`: `lo_table.dat`, `alpha.dat`, per-dataset
+`local_*.dat`/`global_*.dat`/`Sql_*.dat`/`Brl_*.dat`, and plots
+(`zeta_local_L*.png`, `crossover_indicators_L*.png`, `collapse_*.png`,
+`lo_vs_delta.png`).
+
+`scripts/synthetic_profiles.py` runs the same estimators on Gaussian
+profiles with a known `zeta1 -> zeta2` crossover at a known `l_o`, to
+calibrate them. What it shows:
+
+- for `zeta > 1`, first-difference measures (global `B(r)`, and local
+  `B(r,l)` too, even after tilt removal) can't report more than
+  `zeta = 1`. Only `W2(l)` of rotated segments and the spectra see
+  `1.25`;
+- pca segments' ends don't match, so a plain FFT leaks (spectrum
+  `~q^-2`, apparent `zeta` capped near 0.5); the cosine transform (even
+  extension, no jump) recovers `1.25` and `0.5` as well as chord+FFT
+  does, whereas a Hann window biases `zeta` up by 0.1-0.4. Every
+  transform reads ~0.1 high at wavelengths below ~16 (arc-length
+  resampling), and pca+DCT rises to ~2 below wavelength ~5: an
+  artifact, not wall structure;
+- even without any crossover, the local exponent from `W2(l)` drops
+  near `l ~ L/2` (finite size), so only `l_o` well below that is
+  meaningful.
 
 ### Overhang / structure-factor pipeline from the paper (gnuplot/awk/octave)
 

@@ -24,10 +24,12 @@ from pathlib import Path
 HD_LINE = re.compile(r"depinning field h_d = ([-\d.eE+]+)")
 
 
-def run_one(binary, L, h_low, h_high, tol, seed, cwd, with_magjumps=False):
+def run_one(binary, L, h_low, h_high, tol, seed, cwd, with_magjumps=False, dump_field=False):
     cmd = [str(binary), str(L), str(h_low), str(h_high), str(tol), str(seed)]
     if with_magjumps:
         cmd.append("--with-magjumps")
+    if dump_field:
+        cmd.append("--dump-field")
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -51,6 +53,9 @@ def main():
     p.add_argument("--outdir", required=True)
     p.add_argument("--with-magjumps", action="store_true",
                     help="also run the magnetization-jump scan near h_d for each sample (see ./phi4vmc --help)")
+    p.add_argument("--dump-field", action="store_true",
+                    help="also save each critical field phi as raw float32 (criticafield_h*_seed*.bin, L*L*4 bytes), "
+                         "needed by local_roughness.py")
     args = p.parse_args()
 
     binary = Path(args.binary).resolve()
@@ -77,7 +82,7 @@ def main():
                 print(f"seed {seed}: already done, skipping")
                 continue
             hd = run_one(binary, args.L, args.h_low, args.h_high, args.tol, seed, cwd=outdir,
-                         with_magjumps=args.with_magjumps)
+                         with_magjumps=args.with_magjumps, dump_field=args.dump_field)
             print(f"seed {seed}: h_d = {hd:.6f}")
             writer.writerow([seed, hd])
             f.flush()
