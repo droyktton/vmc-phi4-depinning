@@ -4,10 +4,9 @@
 # $OUTROOT/L<L>_D<Delta>/. Like sweep_disorder.sh, seeds already listed
 # in hd_summary.csv are skipped, so resubmitting resumes a cut run.
 #
-# Binaries phi4vmc_D<Delta> must be built beforehand (on the frontend),
-# e.g. for the sm_86 + sm_120 GPUs of the gpu partition:
-#   for D in $DELTAS; do make -B AMPDIS=$D TARGET=phi4vmc_D$D \
-#       NVCC="-std=c++17 -gencode arch=compute_86,code=sm_86 -gencode arch=compute_120,code=sm_120"; done
+# Binaries phi4vmc_D<Delta> must be built beforehand on the frontend
+# (no GPU there, so the Makefile builds for all the gpu partition's archs):
+#   for D in $DELTAS; do make -B AMPDIS=$D TARGET=phi4vmc_D$D; done
 #
 # Usage (from the repository root; number of tasks = #DELTAS * #LS):
 #   DELTAS="0.4 0.5 0.6 0.7 0.85 1.0" LS="1024 2048" NSAMPLES=30 \

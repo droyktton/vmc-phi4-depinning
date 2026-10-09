@@ -56,13 +56,19 @@ RNG (`Random123/`, vendored, header-only) is the only dependency.
 ```
 make                       # builds ./phi4vmc with the default parameters
 make AMPDIS=0.4 CEL=1.0    # override disorder strength / elastic constant
-make AMPDIS=0.6 TARGET=phi4vmc_D0.6 ARCH=sm_86   # named binary, other GPU arch
+make AMPDIS=0.6 TARGET=phi4vmc_D0.6               # named binary (one per Delta)
+make ARCH=sm_86                                    # force a GPU architecture
 ```
 
-`ARCH` defaults to `sm_61` (GTX 10xx); set it to your GPU's compute
-capability (e.g. `sm_86` for RTX 30xx / A-series Ampere). `TARGET`
-lets one binary per `Delta` coexist; since `make` doesn't track the
-`-D` values, use `make -B` when rebuilding with a different `AMPDIS`.
+The GPU architecture is chosen automatically, so the same `make` works on
+a workstation/laptop and on the cluster: with a visible GPU it builds for
+that GPU's compute capability (from `nvidia-smi`); with none (e.g. a
+cluster frontend) it builds one binary for all of `CLUSTER_ARCHS`
+(the cluster's `gpu` partition: `sm_86`, `sm_120`). `ARCH=sm_XY` forces
+one. It compiles as C++17 (required by the Thrust in CUDA >= 13), or
+C++14 with CUDA < 11. `TARGET` lets one binary per `Delta` coexist;
+since `make` doesn't track the `-D` values, use `make -B` when
+rebuilding with a different `AMPDIS`.
 
 ## Run
 
@@ -273,7 +279,7 @@ multivalued fraction reaching `--fmv-th`, and data collapse across
 `Delta` at fixed `L`), and fits `l_o ~ Delta^-alpha` (paper: ~2.2).
 
 ```
-DELTAS="0.4 0.6 0.85 1.0" LS="256 512" NSAMPLES=30 ARCH=sm_86 scripts/sweep_disorder.sh
+DELTAS="0.4 0.6 0.85 1.0" LS="256 512" NSAMPLES=30 scripts/sweep_disorder.sh
 python3 scripts/local_roughness.py data/sweep/L*_D* --outdir data/sweep/analysis
 ```
 
