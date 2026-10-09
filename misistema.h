@@ -364,8 +364,11 @@ class System{
 
 		// runs elementary chunks of "chop" VMC sweeps until the mean DW
 		// velocity drops below TOLVEL (i.e. a metastable state has been
-		// reached)
-		void find_next_metastable(int chop)
+		// reached). If escape_lane>0, also stops as soon as the interface
+		// has swept past row escape_lane*L (magnetization_lane>0): for
+		// bisection that already decides "depinned", so there's no need
+		// to relax the rest of the way (the wall ends up stuck at y=L).
+		void find_next_metastable(int chop, float escape_lane=-1)
 		{
 			float vel;
 			int iterations=0;
@@ -373,6 +376,7 @@ class System{
 				dynamics(chop);
 				vel=velocity_phi();
 				iterations++;
+				if(escape_lane>0 && magnetization_lane(escape_lane)>0) break;
 			}while(fabs(vel)>TOLVEL && iterations<MAXITERATIONS);
 
 			if(iterations>10) std::cout << "\nblocked after " << iterations << " VMC iterations" << std::endl;

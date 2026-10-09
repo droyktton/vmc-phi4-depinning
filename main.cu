@@ -12,7 +12,8 @@
 // interface eventually escapes the sample or stays pinned depends on h
 // alone, not on the relaxation path, so restarting from a flat interface
 // at every trial h is valid). Escape is detected as the top lane of the
-// lattice flipping sign. Bisection stops at |h_high-h_low|<tol, giving h_d.
+// lattice flipping sign, at which point that trial's relaxation is
+// stopped early. Bisection stops at |h_high-h_low|<tol, giving h_d.
 //
 // Around h_d, scan_magnetization_jumps() additionally records the
 // metastable-state sequence (magnetization jumps / "avalanches") on a
@@ -26,6 +27,10 @@
 #include <cstdio>
 #include <string>
 #include "misistema.h"
+
+// a trial field is "depinned" once the interface sweeps past this row
+// (relative height); relaxation stops early as soon as it does
+#define ESCAPE_LANE 0.95
 
 // bisects on h in [h_low,h_high] (tolerance tol) to find the depinning
 // field h_d for the sample seeded by sys->disorder_seed. Saves the
@@ -42,8 +47,8 @@ float find_depinning_field(float h_low, float h_high, float tol, System *sys, bo
 		mid=(a+b)*0.5;
 		sys->set_external_field(mid);
 		sys->set_flat_interface();
-		sys->find_next_metastable(100);
-		if(sys->magnetization_lane(0.95)<0) a=mid;
+		sys->find_next_metastable(100,ESCAPE_LANE);
+		if(sys->magnetization_lane(ESCAPE_LANE)<0) a=mid;
 		else b=mid;
 		std::cout << "[" << a << "," << b << "]" << std::endl;
 		iteration++;
@@ -55,8 +60,8 @@ float find_depinning_field(float h_low, float h_high, float tol, System *sys, bo
 		a=a-tol;
 		sys->set_external_field(a);
 		sys->set_flat_interface();
-		sys->find_next_metastable(100);
-	}while(sys->magnetization_lane(0.95)>0);
+		sys->find_next_metastable(100,ESCAPE_LANE);
+	}while(sys->magnetization_lane(ESCAPE_LANE)>0);
 
 	char filename[100];
 	int L=sys->get_L();
