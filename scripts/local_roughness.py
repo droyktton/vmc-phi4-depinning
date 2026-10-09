@@ -30,7 +30,12 @@ Crossover length l_o per dataset, several definitions:
 and, across the Delta values of each L, by data collapse (horizontal
 shifts in ln l) of fmv_chord(l) and zeta_W_chord(l). Each l_o(Delta) is
 fitted to l_o ~ Delta^-alpha (paper: alpha ~ 1/0.45 ~ 2.2). Errors:
-bootstrap over samples.
+bootstrap over samples. Datasets whose l_o exceeds --lo-max-frac * L are
+left out of the fits and collapses (finite size: the local exponent drops
+near l ~ L/2 even without a crossover, and comparing L=1024 with L=2048,
+l_o agrees up to ~L/4 but is overestimated at ~0.36 L); the collapses use
+the multivalued-fraction l_o for that cut, the most robust definition, and
+only the scales l <= --lo-max-frac * L of each curve.
 
 Example:
     ./local_roughness.py data/sweep/L*_D* --outdir data/sweep/analysis
@@ -263,8 +268,9 @@ def plot_crossover_panels(by_L, outdir):
         plt.close(fig)
 
 
-def collapse(sets, key, floor=None, min_points=4, which="full"):
-    """Shift-collapse of curve `key` across the Delta values of one L.
+def collapse(sets, key, floor=None, min_points=4, which="full", lmax=np.inf):
+    """Shift-collapse of curve `key` across the Delta values of one L,
+    using only scales l <= lmax (finite size).
     With `floor`, only the part of each curve with y >= floor is used,
     and only curves with >= min_points such points take part (a curve
     that is identically ~0, like the multivalued fraction below l_o,
@@ -274,7 +280,7 @@ def collapse(sets, key, floor=None, min_points=4, which="full"):
     for s in sorted(sets, key=lambda s: s["delta"]):
         src = s["full"] if which == "full" else s["boots"][which]
         x, y = src["curves"][key]
-        ok = np.isfinite(y) & (y >= floor if floor is not None else True)
+        ok = np.isfinite(y) & (x <= lmax) & (y >= floor if floor is not None else True)
         if ok.sum() >= min_points:
             used.append(s)
             curves.append((x[ok], y[ok]))
@@ -313,6 +319,9 @@ def main():
                         "(it only approaches 1 for L >> l_o, so the default is low)")
     p.add_argument("--fmv-floor", type=float, default=0.01,
                    help="collapse of the multivalued fraction uses only its part above this")
+    p.add_argument("--lo-max-frac", type=float, default=0.25,
+                   help="leave datasets with l_o above this fraction of L out of the alpha fits and collapses, "
+                        "and collapse only scales below it (finite size; open markers in lo_vs_delta.png)")
     p.add_argument("--lmin", type=float, default=8, help="ignore scales below this when looking for crossings")
     p.add_argument("--half-width", type=float, default=0.15, help="decades, for the local log-derivatives")
     p.add_argument("--nboot", type=int, default=100)
@@ -397,18 +406,26 @@ def main():
                 continue
             ss = sorted(ss, key=lambda s: s["delta"])
             D = np.array([s["delta"] for s in ss])
+            lo_max = args.lo_max_frac * L
             for k in lo_keys:
                 lo = np.array([s["full"]["lo"][k] for s in ss])
-                alpha, _ = re_.power_law_fit(D, lo)
-                ab = [re_.power_law_fit(D, np.array([s["boots"][b]["lo"][k] for s in ss]))[0]
+                # the cut is decided on the full-sample l_o, so every
+                # bootstrap resample fits the same Delta values
+                keep = lo <= lo_max
+                alpha, _ = re_.power_law_fit(D[keep], lo[keep])
+                ab = [re_.power_law_fit(D[keep], np.array([s["boots"][b]["lo"][k] for s in ss])[keep])[0]
                       for b in range(args.nboot)]
-                nD = int(np.isfinite(lo).sum())
+                nD = int(keep.sum())
+                cut = D[np.isfinite(lo) & ~keep]
                 f.write(f"{L} {k} {alpha:.4g} {np.nanstd(ab):.2g} {nD}\n")
-                print(f"  L={L:5d} {k:14s} alpha = {alpha:6.3f} +/- {np.nanstd(ab):.3f}  ({nD} Delta values)")
+                print(f"  L={L:5d} {k:14s} alpha = {alpha:6.3f} +/- {np.nanstd(ab):.3f}  ({nD} Delta values"
+                      + (f"; l_o > {lo_max:g} at Delta = {', '.join(f'{d:g}' for d in cut)}" if len(cut) else "") + ")")
             for key, ylabel, floor in (("fmv_chord", "fraction multivalued", args.fmv_floor),
                                        ("fmv_pca", "fraction multivalued", args.fmv_floor),
                                        ("zeta_W_chord", "local ζ from W²(l)", None)):
-                used, rel, cost = collapse(ss, key, floor)
+                ref = key if key.startswith("fmv") else "fmv_chord"
+                ok = [s for s in ss if s["full"]["lo"][ref] <= lo_max]
+                used, rel, cost = collapse(ok, key, floor, lmax=lo_max)
                 if len(used) < 2:
                     print(f"  L={L:5d} collapse {key:14s} needs >= 2 Delta with signal, skipped")
                     continue
@@ -416,7 +433,7 @@ def main():
                 alpha, _ = re_.power_law_fit(Du, rel)
                 ab = []
                 for b in range(min(args.nboot, 50)):
-                    ub, rb, _ = collapse(used, key, floor, which=b)
+                    ub, rb, _ = collapse(used, key, floor, which=b, lmax=lo_max)
                     if len(ub) == len(used):
                         ab.append(re_.power_law_fit(Du, rb)[0])
                 err = np.nanstd(ab) if ab else np.nan
@@ -428,11 +445,11 @@ def main():
 
     plot_zeta_panels(by_L, outdir, args)
     plot_crossover_panels(by_L, outdir)
-    plot_lo_vs_delta(rows, lo_keys, outdir)
+    plot_lo_vs_delta(rows, lo_keys, outdir, args.lo_max_frac)
     print(f"plots written to {outdir}")
 
 
-def plot_lo_vs_delta(rows, lo_keys, outdir):
+def plot_lo_vs_delta(rows, lo_keys, outdir, lo_max_frac):
     fig, ax = plt.subplots(figsize=(6, 4.5))
     style(ax)
     Ls = sorted({r[0] for r in rows})
@@ -449,6 +466,9 @@ def plot_lo_vs_delta(rows, lo_keys, outdir):
                 continue
             ax.errorbar(D[ok], v[ok], yerr=e[ok], fmt=mk[j % len(mk)] + "-", ms=5, lw=1.2,
                         color=color, label=f"{k} (L={L})")
+            # open markers: left out of the fits (l_o > lo_max_frac * L)
+            out = ok & (v > lo_max_frac * L)
+            ax.plot(D[out], v[out], mk[j % len(mk)], ms=5, mfc="white", mec=color, mew=1.2, zorder=3)
     # reference slope, through the median l_o at the largest Delta
     Dg = np.array(sorted({r[1] for r in rows}))
     at_max = [v for r in rows if r[1] == Dg.max() for v in r[6] if np.isfinite(v)]
@@ -460,7 +480,7 @@ def plot_lo_vs_delta(rows, lo_keys, outdir):
     ax.set_xlabel("Δ", fontsize=9)
     ax.set_ylabel("l_o", fontsize=9)
     ax.legend(fontsize=6, frameon=False, ncol=2)
-    ax.set_title("crossover length vs disorder, all definitions", fontsize=9)
+    ax.set_title(f"crossover length vs disorder, all definitions (open: l_o > {lo_max_frac:g} L, not fitted)", fontsize=9)
     fig.tight_layout()
     fig.savefig(outdir / "lo_vs_delta.png", dpi=150)
     plt.close(fig)

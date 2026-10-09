@@ -277,6 +277,11 @@ From these it gets local exponents (log-derivatives), several
 definitions of `l_o` (local exponent dropping below `--zeta-th`,
 multivalued fraction reaching `--fmv-th`, and data collapse across
 `Delta` at fixed `L`), and fits `l_o ~ Delta^-alpha` (paper: ~2.2).
+Datasets with `l_o > --lo-max-frac * L` (default `L/4`) are left out of
+the fits and collapses, and the collapses only use scales `l <= L/4`:
+comparing `L=1024` with `L=2048`, `l_o` agrees between the two up to
+about `L/4` but is overestimated beyond (open markers in
+`lo_vs_delta.png`).
 
 ```
 DELTAS="0.4 0.6 0.85 1.0" LS="256 512" NSAMPLES=30 scripts/sweep_disorder.sh
