@@ -278,7 +278,15 @@ python3 scripts/local_roughness.py data/sweep/L*_D* --outdir data/sweep/analysis
 ```
 
 `scripts/sweep_disorder.sh` builds one binary per `Delta` and runs
-`run_batch.py --dump-field` into `data/sweep/L<L>_D<Delta>/`. Outputs of
+`run_batch.py --dump-field` into `data/sweep/L<L>_D<Delta>/`. On a SLURM
+cluster, `scripts/slurm_sweep.sh` does the same as a job array with one
+GPU per `(L, Delta)` (build the binaries first; see its header):
+
+```
+DELTAS="0.4 0.5 0.6 0.7 0.85 1.0" LS="1024 2048" NSAMPLES=30 \
+    sbatch --array=0-11 scripts/slurm_sweep.sh
+```
+ Outputs of
 `local_roughness.py`: `lo_table.dat`, `alpha.dat`, per-dataset
 `local_*.dat`/`global_*.dat`/`Sql_*.dat`/`Brl_*.dat`, and plots
 (`zeta_local_L*.png`, `crossover_indicators_L*.png`, `collapse_*.png`,
