@@ -414,6 +414,48 @@ $\gtrsim 250$ ($\Delta\approx0.055$).
 **Larkin collapse.** The part with $\zeta_W\ge1.3$ is collapsed by
 shifts in $\ln l$ (§5.3), and the shifts are fitted to $\Delta^{-x_c}$.
 
+### 6.5 Dependence on the step shape
+
+$\zeta_q$ is not observed but extrapolated from the two crossovers, so
+it depends on the assumed shape of the step $s(x)$, $x = \ln(l/\ell)$.
+`--forms` fits four shapes:
+
+| form | $s(x)$ | approach to the limits |
+|---|---|---|
+| `logistic` | $1/(1+e^{-x/w})$ | power law $(l/\ell)^{\pm 1/w}$, same on both sides |
+| `erf` | $\tfrac12[1+\operatorname{erf}(x/w)]$ | Gaussian in $\ln l$ |
+| `asym` | $(1+\nu e^{-x/w})^{-1/\nu}$ (Richards) | power law, rate $1/(w\nu)$ below and $1/w$ above |
+| `sum` | no free width: $1/W^2 = \sum_i (l/\ell_i)^{-2\zeta_i}$ | $\zeta(l) = \sum_i\zeta_i t_i/\sum_i t_i$ ($t_i$ the terms), a logistic of fixed width $w = 1/(2|\delta\zeta|)$ |
+
+In `sum`, each regime is an independent contribution to $W^2$ and the
+one with the smallest $W^2$ dominates. Its widths are fixed by the jumps
+in $\zeta$: $w_1 = 1/(2\cdot0.3)\approx1.7$ and
+$w_2 = 1/(2\cdot0.15)\approx3.3$, much broader than what the free-width
+shapes find.
+
+Results ($\zeta_L = 1.5$; bootstrap errors; $\chi^2/\text{dof}$ only
+relative):
+
+| form | all free | $x_c = 2/3$ | $x_c = 2/3$, $\alpha = 2.1$ | $\chi^2/\text{dof}$ |
+|---|---|---|---|---|
+| logistic | 1.18 ± 0.08 | 1.15 ± 0.04 | 1.203 ± 0.014 | 0.67–0.69 |
+| erf | 1.16 ± 0.08 | 1.15 ± 0.04 | 1.209 ± 0.014 | 0.67–0.69 |
+| asym | 1.14 ± 0.09 | 1.14 ± 0.08 | 1.214 ± 0.018 | 0.66 |
+| sum | 1.12 ± 0.01 | 1.07 ± 0.01 | 1.144 ± 0.015 | 0.80–1.02 |
+
+- **The free-width shapes agree.** At fixed variant, logistic, erf and
+  asym differ by $\lesssim0.04$ in $\zeta_q$, with the same $\chi^2$.
+  The step shape is not the main systematic.
+- **Freeing $\alpha$ is.** With $\alpha$ free the fits push it to ≈ 3
+  ($\pm1$), above the $\approx2.1$ of the multivalued fraction, and
+  $\zeta_q$ drops to 1.14–1.18 with errors ≈ 0.04–0.09.
+- **`sum` is disfavoured.** It has a higher $\chi^2$, and to follow the
+  data it pushes parameters to unphysical values: $\alpha$ at its bound
+  (6), $x_c\to0$, and $L_c > l_o$. The data need crossovers sharper than
+  independent additive contributions give.
+- **No shape gives $\zeta_q = 1.25$.** With free width, $\zeta_q$ ranges
+  from 1.14 to 1.21 over shapes and variants.
+
 ## 7. Larkin scaling
 
 **Effective elasticity.** For slow displacements the wall is an elastic
@@ -462,7 +504,7 @@ $l_o$.
 | $l_o$ from $f_{\rm mv}$, chord ($L=2048$) | 513, 274, 237, 136, 106 for $\Delta$ = 0.5, 0.6, 0.7, 0.85, 1.0; independent of $L$ for $\Delta\ge0.7$ |
 | $\alpha$ ($L=2048$, $l_o\le L/4$) | $f_{\rm mv}$: 1.98 ± 0.15 (chord), 2.20 ± 0.23 (principal axis); collapses: 2.06 ± 0.12, 2.23 ± 0.14 |
 | Larkin collapse | $x_c = 0.65\pm0.06$ ($L=2048$), $0.83\pm0.09$ ($L=1024$); compatible with 2/3 |
-| two-crossover fit | free $\zeta_L$: 1.47–1.51; $\zeta_q = 1.203\pm0.014$ with $x_c$, $\alpha$ fixed; between 1.11 and 1.22 depending on the variant |
+| two-crossover fit | free $\zeta_L$: 1.47–1.51; $\zeta_q = 1.203\pm0.014$ with $x_c$, $\alpha$ fixed; 1.14–1.21 over step shapes and variants (§6.5) |
 | $l_o$ from $\zeta_W$ or global $S$ | unreliable ($\alpha$ between −2.7 and 2.0): the 1.125 threshold falls where the two crossovers overlap |
 
 **Reading.**
@@ -470,9 +512,12 @@ $l_o$.
 - **Larkin, confirmed.** The ~1.45 at small scales is physical: it
   doesn't appear on synthetic $\zeta = 1.25$ profiles, it scales with
   $\Delta^{-2/3}$, and the fit with free $\zeta_L$ gives 1.5.
-- **$\zeta_q$, not resolved.** The Larkin collapse keeps working below
-  1.25, down to ≈ 1.2, and the fit gives $\zeta_q\approx1.20$. The
-  systematic error from the model's shape is ~0.05–0.1, so there is no
-  significant difference from 1.25.
+- **$\zeta_q$, below 1.25 but not conclusive.** The Larkin collapse
+  keeps working below 1.25, down to ≈ 1.2. Every crossover shape that
+  fits gives $\zeta_q$ = 1.14–1.21, never 1.25, and the shape changes it
+  by $\lesssim0.04$. The largest uncertainty is the degeneracy with
+  $\alpha$ (free $\alpha\approx3$ against 2.1 from $f_{\rm mv}$), and
+  all of it rests on extrapolating through a window where the plateau is
+  never reached.
 - **The qEW window is too narrow.** With $l_o/L_c\approx4$–15 it can't be
   resolved; per §6.3, it would take a much smaller $\Delta$.
