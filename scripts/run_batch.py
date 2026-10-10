@@ -24,8 +24,11 @@ from pathlib import Path
 HD_LINE = re.compile(r"depinning field h_d = ([-\d.eE+]+)")
 
 
-def run_one(binary, L, h_low, h_high, tol, seed, cwd, with_magjumps=False, dump_field=False, verbose=True):
+def run_one(binary, L, h_low, h_high, tol, seed, cwd, with_magjumps=False, dump_field=False, verbose=True,
+            ly_k=None):
     cmd = [str(binary), str(L), str(h_low), str(h_high), str(tol), str(seed)]
+    if ly_k:
+        cmd += ["--ly-k", str(ly_k)]
     if with_magjumps:
         cmd.append("--with-magjumps")
     if dump_field:
@@ -55,6 +58,8 @@ def main():
     p.add_argument("--tol", type=float, default=1e-4)
     p.add_argument("--nsamples", type=int, required=True)
     p.add_argument("--seed-start", type=int, default=1)
+    p.add_argument("--ly-k", type=float, default=None,
+                   help="Ly = k*L^1.25 (see ./phi4vmc --help); default: square L x L")
     p.add_argument("--outdir", required=True)
     p.add_argument("--with-magjumps", action="store_true",
                     help="also run the magnetization-jump scan near h_d for each sample (see ./phi4vmc --help)")
@@ -87,7 +92,7 @@ def main():
                 print(f"seed {seed}: already done, skipping")
                 continue
             hd = run_one(binary, args.L, args.h_low, args.h_high, args.tol, seed, cwd=outdir,
-                         with_magjumps=args.with_magjumps, dump_field=args.dump_field)
+                         with_magjumps=args.with_magjumps, dump_field=args.dump_field, ly_k=args.ly_k)
             print(f"seed {seed}: h_d = {hd:.6f}")
             writer.writerow([seed, hd])
             f.flush()

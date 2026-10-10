@@ -8,7 +8,7 @@
 //
 // Method: bisection on the external field h. For each trial h, the
 // interface is relaxed to a metastable state; escape is detected as the
-// lane at ESCAPE_LANE*L flipping sign, at which point that trial's
+// lane at ESCAPE_LANE*Ly flipping sign, at which point that trial's
 // relaxation is stopped early. Bisection stops at |h_high-h_low|<tol,
 // giving h_d = h_low (the largest field found pinned).
 //
@@ -17,11 +17,18 @@
 // state X with flat <= X <= M(h). The pinned state M(a) at a field a<h
 // is such a state, so each trial starts from the last pinned state
 // instead of from the flat interface: the wall only has to move from
-// M(a) to M(h), not all the way from y=0.2L. After an escape, the last
+// M(a) to M(h), not all the way from y=0.2Ly. After an escape, the last
 // pinned state is restored. (flat <= M(a) only holds up to the bulk
 // sites, which relax within a few sweeps, so this is checked: at the end,
 // --verify-cold relaxes again from the flat interface at h_d and
 // compares; see docs/analysis_math.md, section 2.3.)
+//
+// Geometry: Lx (along the wall, periodic) by Ly (along the motion,
+// anti-periodic). The wall starts flat at y=0.2Ly and escapes at
+// 0.95Ly, so it can explore 0.75Ly. Since the wall's vertical extent
+// grows as Lx^zeta, finite-size scaling needs Ly = k Lx^zeta at fixed k
+// (--ly-k; zeta = LY_ZETA = 1.25, qEW). A square box (the default) has
+// k = Lx^-0.25, which shrinks with Lx.
 //
 // Around h_d, scan_magnetization_jumps() additionally records the
 // metastable-state sequence (magnetization jumps / "avalanches") on a
@@ -43,6 +50,9 @@
 
 // relaxation is checked every CHOP sweeps
 #define CHOP 1000
+
+// Ly = k Lx^LY_ZETA with --ly-k k (rounded to a multiple of 32, the tile)
+#define LY_ZETA 1.25
 
 // relaxes the current state at field h; true if the interface escaped,
 // or (with the default, local stopping criterion) if it was still moving
@@ -124,11 +134,11 @@ float find_depinning_field(float h_low, float h_high, float tol, System *sys, bo
 	}
 
 	char filename[100];
-	int L=sys->get_L();
+	int Lx=sys->get_L(), Ly=sys->get_Ly();
 
 	sprintf(filename,"critica_h%f_seed%lu.dat",a,sys->disorder_seed);
 	std::ofstream critical_wall_out(filename);
-	sys->print_wall(critical_wall_out,0,L,int(L*0.01),int(L*0.99));
+	sys->print_wall(critical_wall_out,0,Lx,int(Ly*0.01),int(Ly*0.99));
 
 	sprintf(filename,"criticamag_h%f_seed%lu.dat",a,sys->disorder_seed);
 	std::ofstream critical_mag_out(filename);
@@ -149,7 +159,8 @@ float find_depinning_field(float h_low, float h_high, float tol, System *sys, bo
 // in the paper.
 void scan_magnetization_jumps(float h_low, float h_high, System *sys)
 {
-	int L=sys->get_L();
+	int Lx=sys->get_L(), Ly=sys->get_Ly();
+	double N=double(Lx)*Ly;
 	char filename[100];
 
 	sprintf(filename,"jumps_seed%lu.dat",sys->disorder_seed);
@@ -163,17 +174,17 @@ void scan_magnetization_jumps(float h_low, float h_high, System *sys)
 	sys->set_external_field(h_low);
 	sys->find_next_metastable(100);
 
-	float previous_magnetization=sys->magnetization()/(L*L);
+	float previous_magnetization=sys->magnetization()/N;
 	int num_steps=100;
 	float h=h_low;
 	for(int step=1;step<=num_steps;step++){
 		h+=(h_high-h_low)/float(num_steps);
 		sys->set_external_field(h);
 		sys->find_next_metastable(100);
-		float magnetization=sys->magnetization()/(L*L);
+		float magnetization=sys->magnetization()/N;
 		jumps_out << step << " " << h << " " << h_high << " " << magnetization-previous_magnetization << std::endl;
 		previous_magnetization=magnetization;
-		sys->print_wall(metastable_wall_out,0,L,int(L*0.01),int(L*0.99));
+		sys->print_wall(metastable_wall_out,0,Lx,int(Ly*0.01),int(Ly*0.99));
 		sys->print_magnetization_profile(metastable_mag_out);
 	}
 }
@@ -182,7 +193,8 @@ int main(int argc, char **argv)
 {
 	int L; float h_low,h_high,tol; unsigned long disorder_seed;
 	bool with_magjumps=false, dump_field=false, verify_cold=false, bad_flag=false;
-	float tolres=-1, tile_eps=-1;
+	float tolres=-1, tile_eps=-1, ly_k=-1;
+	int Ly=-1;
 	std::string relax_from;
 	bool no_warm=false, no_tiles=false;
 	for(int i=6;i<argc;i++){
@@ -195,6 +207,8 @@ int main(int argc, char **argv)
 		else if(flag=="--tile-eps" && i+1<argc) tile_eps=atof(argv[++i]);
 		else if(flag=="--relax-from" && i+1<argc) relax_from=argv[++i];
 		else if(flag=="--tolres" && i+1<argc) tolres=atof(argv[++i]);
+		else if(flag=="--ly" && i+1<argc) Ly=atoi(argv[++i]);
+		else if(flag=="--ly-k" && i+1<argc) ly_k=atof(argv[++i]);
 		else bad_flag=true;
 	}
 	if(argc>=6 && !bad_flag){
@@ -206,25 +220,31 @@ int main(int argc, char **argv)
 	}
 	else{
 		std::cout << "usage: " << argv[0] << " L h_low h_high tol seed [--with-magjumps] [--dump-field] [--verify-cold]" << std::endl;
-		std::cout << "  L               lattice size (must be even)" << std::endl;
+		std::cout << "  L               lattice size Lx along the wall (must be even)" << std::endl;
 		std::cout << "  h_low           lower bracket for the depinning field (lowered if the interface depins there)" << std::endl;
 		std::cout << "  h_high          upper bracket for the depinning field (raised if the interface stays pinned there)" << std::endl;
 		std::cout << "  tol             bisection tolerance on h_d (paper uses 1e-4)" << std::endl;
 		std::cout << "  seed            disorder-realization seed" << std::endl;
 		std::cout << "  --with-magjumps also run the (comparatively expensive) magnetization-jump scan near h_d" << std::endl;
-		std::cout << "  --dump-field    also save the critical field phi as raw float32 (L*L*4 bytes)" << std::endl;
+		std::cout << "  --dump-field    also save the critical field phi as raw float32 (Lx*Ly*4 bytes)" << std::endl;
 		std::cout << "  --verify-cold   relax again from a flat interface at h_d and compare with the warm-started state" << std::endl;
 		std::cout << "  --no-warm       start every trial from a flat interface (no warm starts)" << std::endl;
 		std::cout << "  --no-tiles      sweep the whole lattice instead of the active tiles only" << std::endl;
 		std::cout << "  --tile-eps x    a change |dphi|<=x doesn't keep a tile active (default " << TILE_EPS << "; 0: exact)" << std::endl;
 		std::cout << "  --relax-from f  instead: relax the field in f (as saved by --dump-field) at h=h_low, and report" << std::endl;
 		std::cout << "                  how far it moves (checks that a saved configuration is metastable)" << std::endl;
+		std::cout << "  --ly N          lattice size Ly along the motion (default: Lx)" << std::endl;
+		std::cout << "  --ly-k k        Ly = k*Lx^" << LY_ZETA << ", rounded to a multiple of 32 (keeps the box's" << std::endl;
+		std::cout << "                  shape scaled with the wall's roughness across Lx)" << std::endl;
 		std::cout << "  --tolres x      convergence cutoff on max|dphi/dt| (default " << TOLRES << "; 0: legacy mean-velocity criterion)" << std::endl;
 		std::cout << "example: " << argv[0] << " 256 0.0 0.1 0.0001 1234" << std::endl;
 		return 1;
 	}
 
-	System sys(L,disorder_seed);
+	if(ly_k>0) Ly=32*std::max(1,int(lround(ly_k*pow(double(L),LY_ZETA)/32)));
+	if(Ly<=0) Ly=L;
+	std::cout << "Lx=" << L << " Ly=" << Ly << std::endl;
+	System sys(L,Ly,disorder_seed);
 	if(tolres>=0) sys.set_tolres(tolres);
 	if(no_tiles) sys.set_use_tiles(false);
 	if(tile_eps>=0) sys.set_tile_eps(tile_eps);

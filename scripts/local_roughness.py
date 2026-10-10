@@ -117,7 +117,7 @@ def measure_dir(datadir, pca_transform="dct", refresh=False):
     ls, rs = grids(L)
     rows, nbub = [], 0
     for f in files:
-        curve, nb = wall_curve(read_field(f))
+        curve, nb = wall_curve(read_field(f, L))
         nbub += nb
         rows.append(measure_curve(curve, L, ls, rs, pca_transform))
     data = {k: np.array([r[k] for r in rows]) for k in rows[0]}

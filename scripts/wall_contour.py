@@ -1,6 +1,6 @@
 """Domain wall of a critical configuration as an ordered curve, from the
 raw field dumped by `./phi4vmc ... --dump-field`
-(criticafield_h<h_d>_seed<seed>.bin: L*L float32, row-major, index x+y*L).
+(criticafield_h<h_d>_seed<seed>.bin: Ly*Lx float32, row-major, index x+y*Lx).
 
 The wall-point files (critica_*.dat) can't be used for this: their
 detector (is_wall_smooth) only looks for sign changes along y, so
@@ -25,13 +25,15 @@ def parse_field_filename(path):
     return float(m.group(1)), int(m.group(2))
 
 
-def read_field(path):
-    """Returns phi as an (L, L) array indexed [y, x]."""
+def read_field(path, Lx=None):
+    """Returns phi as an (Ly, Lx) array indexed [y, x]. Without Lx, the
+    field is taken to be square."""
     phi = np.fromfile(path, dtype=np.float32)
-    L = int(round(np.sqrt(phi.size)))
-    if L * L != phi.size:
-        raise ValueError(f"{path}: {phi.size} values is not a square field")
-    return phi.reshape(L, L)
+    if Lx is None:
+        Lx = int(round(np.sqrt(phi.size)))
+    if phi.size % Lx:
+        raise ValueError(f"{path}: {phi.size} values is not a whole number of rows of {Lx}")
+    return phi.reshape(-1, Lx)
 
 
 def wall_curve(phi, edge_margin=3):
@@ -41,12 +43,13 @@ def wall_curve(phi, edge_margin=3):
 
     phi is tiled 3x along x (periodic) and its phi=0 level lines are
     traced; the wall is the longest one spanning the whole tile that
-    stays clear of the y edges (the seam rows at y~0 and y~L-1 carry
-    their own flat sign change, which is not the wall). Detached
+    stays clear of the y edges (with the legacy y boundary condition,
+    the seam rows at y~0 and y~Ly-1 carry their own flat sign change,
+    which is not the wall). Detached
     bubbles (closed contours) are ignored; their number is returned.
     Returns (curve, n_bubbles).
     """
-    L = phi.shape[1]
+    Ly, L = phi.shape
     tiled = np.concatenate([phi, phi, phi], axis=1)
     contours = measure.find_contours(tiled, 0.0)
 
@@ -56,7 +59,7 @@ def wall_curve(phi, edge_margin=3):
         if np.allclose(c[0], c[-1]):
             n_bubbles += 1
             continue
-        if y.min() < edge_margin or y.max() > L - 1 - edge_margin:
+        if y.min() < edge_margin or y.max() > Ly - 1 - edge_margin:
             continue
         if x.min() > 0.5 or x.max() < 3 * L - 1.5:
             continue  # doesn't span the tile

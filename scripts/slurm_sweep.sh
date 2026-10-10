@@ -32,6 +32,7 @@ DELTAS=${DELTAS:-"0.4 0.5 0.6 0.7 0.85 1.0"}
 LS=${LS:-"1024 2048"}
 NSAMPLES=${NSAMPLES:-30}
 SEED_START=${SEED_START:-1}
+LYK=${LYK:-}   # if set, Ly = LYK*L^1.25 (else a square L x L box)
 TOL=${TOL:-1e-4}
 OUTROOT=${OUTROOT:-data/sweep}
 
@@ -47,7 +48,7 @@ L=${LARR[$((i / ${#DARR[@]}))]}
 HEST=$(python3 -c "print(0.0195*($D/0.4)**1.34)")
 HLOW=${HLOW:-$(python3 -c "print(0.85*$HEST)")}
 HHIGH=${HHIGH:-$(python3 -c "print(1.15*$HEST)")}
-echo "=== $(hostname) GPU=${CUDA_VISIBLE_DEVICES:-?} Delta=$D L=$L h in [$HLOW, $HHIGH] ==="
+echo "=== $(hostname) GPU=${CUDA_VISIBLE_DEVICES:-?} Delta=$D L=$L LYK=${LYK:-square} h in [$HLOW, $HHIGH] ==="
 python3 -u scripts/run_batch.py --binary "./phi4vmc_D$D" --L "$L" \
     --h-low "$HLOW" --h-high "$HHIGH" --tol "$TOL" --nsamples "$NSAMPLES" --seed-start "$SEED_START" \
-    --dump-field --outdir "$OUTROOT/L${L}_D${D}"
+    ${LYK:+--ly-k "$LYK"} --dump-field --outdir "$OUTROOT/L${L}_D${D}"

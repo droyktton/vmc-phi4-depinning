@@ -33,6 +33,7 @@
 #include <iostream>
 #include <cmath>
 #include <fstream>
+#include <vector>
 
 typedef float REAL;
 
@@ -55,7 +56,7 @@ typedef float REAL;
 #endif
 
 // safety cap on find_next_metastable's relaxation, in sweeps:
-// max(MAXSWEEPS, MAXSWEEPS_PER_L*L). A relaxation that hasn't converged
+// max(MAXSWEEPS, MAXSWEEPS_PER_L*Lx). A relaxation that hasn't converged
 // by then is reported as such (converged()==false), and the bisection
 // counts it as depinned. Near h_d relaxations get very long at large L:
 // at L=8192 a pinned trial took 8.3e5 sweeps to converge, and a trial
@@ -139,34 +140,36 @@ float site_disorder(int site_index, unsigned long disorder_seed)
 // update itself does not use this functor)
 struct velocityop
 {
-	int L;
+	int Lx, Ly;
 	float * phi;
 	float external_field;
 	unsigned long disorder_seed;
 
-	velocityop(float *_phi, int _L, float _external_field, unsigned long _disorder_seed):
-	phi(_phi),L(_L),external_field(_external_field),disorder_seed(_disorder_seed){};
+	velocityop(float *_phi, int _Lx, int _Ly, float _external_field, unsigned long _disorder_seed):
+	phi(_phi),Lx(_Lx),Ly(_Ly),external_field(_external_field),disorder_seed(_disorder_seed){};
 
 	__device__
 	float operator()(int i)
 	{
-		int x=i%L;
-		int y=int(i/L);
+		int x=i%Lx;
+		int y=int(i/Lx);
 
-		int y_plus1=(y+1)%L, y_minus1=(y-1+L)%L;
-		int x_plus1=(x+1)%L, x_minus1=(x-1+L)%L;
+		int y_plus1=(y+1)%Ly, y_minus1=(y-1+Ly)%Ly;
+		int x_plus1=(x+1)%Lx, x_minus1=(x-1+Lx)%Lx;
 
-		int up=x+L*y_minus1, down=x+L*y_plus1;
-		int right=x_plus1+L*y, left=x_minus1+L*y;
-		int center=x+L*y;
+		int up=x+Lx*y_minus1, down=x+Lx*y_plus1;
+		int right=x_plus1+Lx*y, left=x_minus1+Lx*y;
+		int center=x+Lx*y;
 
 		float phi_up=phi[up], phi_down=phi[down];
 		float phi_right=phi[right], phi_left=phi[left];
 		float phi_center=phi[center];
 
-		// anti-periodic BC in y: a single domain wall spans the sample
-		if(y==0) phi_down*=-1;
-		if(y==L-1) phi_up*=-1;
+		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
+		// wall spans the sample. The neighbor across the seam is "up"
+		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1.
+		if(y==0) phi_up*=-1;
+		if(y==Ly-1) phi_down*=-1;
 
 		float laplacian = phi_up+phi_down+phi_right+phi_left-4.0*phi_center;
 		float r = site_disorder(center, disorder_seed);
@@ -215,38 +218,40 @@ float vmc_site_update(float phi_center, float sum_neighbors, float r, float exte
 // each site's four neighbors always belong to the other color.
 struct vmcop
 {
-	int L;
+	int Lx, Ly;
 	float * phi;
 	float external_field;
 	int color_offset;
 	unsigned long disorder_seed;
 
-	vmcop(float *_phi, int _L, float _external_field, int _color_offset, unsigned long _disorder_seed)
-	:phi(_phi),L(_L),external_field(_external_field),color_offset(_color_offset),disorder_seed(_disorder_seed)
+	vmcop(float *_phi, int _Lx, int _Ly, float _external_field, int _color_offset, unsigned long _disorder_seed)
+	:phi(_phi),Lx(_Lx),Ly(_Ly),external_field(_external_field),color_offset(_color_offset),disorder_seed(_disorder_seed)
 	{};
 
 	__device__
 	void operator()(int j)
 	{
-		int i = (2*j) + (int((2*j)/L)+color_offset)%2;
+		int i = (2*j) + (int((2*j)/Lx)+color_offset)%2;
 
-		int x=i%L;
-		int y=int(i/L);
+		int x=i%Lx;
+		int y=int(i/Lx);
 
-		int y_plus1=(y+1)%L, y_minus1=(y-1+L)%L;
-		int x_plus1=(x+1)%L, x_minus1=(x-1+L)%L;
+		int y_plus1=(y+1)%Ly, y_minus1=(y-1+Ly)%Ly;
+		int x_plus1=(x+1)%Lx, x_minus1=(x-1+Lx)%Lx;
 
-		int up=x+L*y_minus1, down=x+L*y_plus1;
-		int right=x_plus1+L*y, left=x_minus1+L*y;
-		int center=x+L*y;
+		int up=x+Lx*y_minus1, down=x+Lx*y_plus1;
+		int right=x_plus1+Lx*y, left=x_minus1+Lx*y;
+		int center=x+Lx*y;
 
 		float phi_up=phi[up], phi_down=phi[down];
 		float phi_right=phi[right], phi_left=phi[left];
 		float phi_center=phi[center];
 
-		// anti-periodic BC in y: a single domain wall spans the sample
-		if(y==0) phi_down*=-1;
-		if(y==L-1) phi_up*=-1;
+		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
+		// wall spans the sample. The neighbor across the seam is "up"
+		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1.
+		if(y==0) phi_up*=-1;
+		if(y==Ly-1) phi_down*=-1;
 
 		phi[center]=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
 			site_disorder(center, disorder_seed),external_field);
@@ -270,29 +275,29 @@ struct vmcop
 #define TILE_EPS 1e-6
 #endif
 __global__
-void vmc_tiles_kernel(float *phi, int L, float external_field, int color_offset,
+void vmc_tiles_kernel(float *phi, int Lx, int Ly, float external_field, int color_offset,
 	unsigned long disorder_seed, const unsigned char *active, unsigned char *changed,
 	unsigned long long *work, float tile_eps)
 {
-	int T=L/TILE;
+	int Tx=Lx/TILE;
 	int tile=blockIdx.x;
 	if(!active[tile]) return;
 	if(threadIdx.x==0) atomicAdd(work,1ULL);
 
-	int y=(tile/T)*TILE+threadIdx.x/(TILE/2);
-	int x=(tile%T)*TILE+2*(threadIdx.x%(TILE/2));
+	int y=(tile/Tx)*TILE+threadIdx.x/(TILE/2);
+	int x=(tile%Tx)*TILE+2*(threadIdx.x%(TILE/2));
 	x+=(y+color_offset)&1; // this color: x = y+color_offset (mod 2), as in vmcop
 
-	int y_plus1=(y+1)%L, y_minus1=(y-1+L)%L;
-	int x_plus1=(x+1)%L, x_minus1=(x-1+L)%L;
-	int center=x+L*y;
-	float phi_up=phi[x+L*y_minus1], phi_down=phi[x+L*y_plus1];
-	float phi_right=phi[x_plus1+L*y], phi_left=phi[x_minus1+L*y];
+	int y_plus1=(y+1)%Ly, y_minus1=(y-1+Ly)%Ly;
+	int x_plus1=(x+1)%Lx, x_minus1=(x-1+Lx)%Lx;
+	int center=x+Lx*y;
+	float phi_up=phi[x+Lx*y_minus1], phi_down=phi[x+Lx*y_plus1];
+	float phi_right=phi[x_plus1+Lx*y], phi_left=phi[x_minus1+Lx*y];
 	float phi_center=phi[center];
 
-	// anti-periodic BC in y: a single domain wall spans the sample
-	if(y==0) phi_down*=-1;
-	if(y==L-1) phi_up*=-1;
+	// anti-periodic BC in y (see velocityop)
+	if(y==0) phi_up*=-1;
+	if(y==Ly-1) phi_down*=-1;
 
 	float new_phi=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
 		site_disorder(center, disorder_seed),external_field);
@@ -304,20 +309,20 @@ void vmc_tiles_kernel(float *phi, int L, float external_field, int color_offset,
 
 // active[t] = some site changed in tile t or in one of its 4 neighbors
 __global__
-void spread_activity(const unsigned char *changed, unsigned char *active, int T)
+void spread_activity(const unsigned char *changed, unsigned char *active, int Tx, int Ty)
 {
 	int tile=blockIdx.x*blockDim.x+threadIdx.x;
-	if(tile>=T*T) return;
-	int tx=tile%T, ty=tile/T;
-	active[tile]=changed[tile] | changed[(tx+1)%T+T*ty] | changed[(tx-1+T)%T+T*ty]
-		| changed[tx+T*((ty+1)%T)] | changed[tx+T*((ty-1+T)%T)];
+	if(tile>=Tx*Ty) return;
+	int tx=tile%Tx, ty=tile/Tx;
+	active[tile]=changed[tile] | changed[(tx+1)%Tx+Tx*ty] | changed[(tx-1+Tx)%Tx+Tx*ty]
+		| changed[tx+Tx*((ty+1)%Ty)] | changed[tx+Tx*((ty-1+Ty)%Ty)];
 }
 
-__host__ __device__ int index_center(int x,int y,int L){ return x+L*y; }
-__host__ __device__ int index_up(int x,int y,int L){ return x+L*((y-1+L)%L); }
-__host__ __device__ int index_down(int x,int y,int L){ return x+L*((y+1)%L); }
-__host__ __device__ int index_right(int x,int y,int L){ return (x+1)%L+L*y; }
-__host__ __device__ int index_left(int x,int y,int L){ return (x-1+L)%L+L*y; }
+__host__ __device__ int index_center(int x,int y,int Lx,int Ly){ return x+Lx*y; }
+__host__ __device__ int index_up(int x,int y,int Lx,int Ly){ return x+Lx*((y-1+Ly)%Ly); }
+__host__ __device__ int index_down(int x,int y,int Lx,int Ly){ return x+Lx*((y+1)%Ly); }
+__host__ __device__ int index_right(int x,int y,int Lx,int Ly){ return (x+1)%Lx+Lx*y; }
+__host__ __device__ int index_left(int x,int y,int Lx,int Ly){ return (x-1+Lx)%Lx+Lx*y; }
 
 // detects domain-wall sites, restricted to the [x1,x2]x[y1,y2] window
 // (to avoid picking up the periodic-image seam). Each site is first
@@ -328,27 +333,27 @@ __host__ __device__ int index_left(int x,int y,int L){ return (x-1+L)%L+L*y; }
 // configuration has overhangs/pinch-off loops (see paper, Fig. 1).
 struct is_wall_smooth
 {
-	int L;
+	int Lx, Ly;
 	float *phi;
 	int x1, x2, y1, y2;
-	is_wall_smooth(float *_phi, int _L, int _x1, int _x2, int _y1, int _y2):
-	phi(_phi),L(_L),x1(_x1),x2(_x2),y1(_y1),y2(_y2){};
+	is_wall_smooth(float *_phi, int _Lx, int _Ly, int _x1, int _x2, int _y1, int _y2):
+	phi(_phi),Lx(_Lx),Ly(_Ly),x1(_x1),x2(_x2),y1(_y1),y2(_y2){};
 
 	__device__
 	float smoothed(int x, int y)
 	{
-		return phi[index_center(x,y,L)]+phi[index_up(x,y,L)]+phi[index_down(x,y,L)]
-			+phi[index_right(x,y,L)]+phi[index_left(x,y,L)];
+		return phi[index_center(x,y,Lx,Ly)]+phi[index_up(x,y,Lx,Ly)]+phi[index_down(x,y,Lx,Ly)]
+			+phi[index_right(x,y,Lx,Ly)]+phi[index_left(x,y,Lx,Ly)];
 	}
 
 	__device__
 	bool operator()(int i)
 	{
-		int x=i%L;
-		int y=int(i/L);
+		int x=i%Lx;
+		int y=int(i/Lx);
 
-		float smoothed_up=smoothed(x,(y-1+L)%L);
-		float smoothed_down=smoothed(x,(y+1)%L);
+		float smoothed_up=smoothed(x,(y-1+Ly)%Ly);
+		float smoothed_down=smoothed(x,(y+1)%Ly);
 
 		bool sign_change = (smoothed_up*smoothed_down<0);
 		return sign_change && x>x1 && x<x2 && y>y1 && y<y2;
@@ -373,7 +378,7 @@ class System{
 		thrust::device_ptr<float> d_phi;
 		thrust::device_ptr<float> d_saved; // a copy of phi (save_state/restore_state)
 		thrust::device_ptr<float> d_snap;  // phi some sweeps ago (find_next_metastable)
-		thrust::device_ptr<int> d_wall_site_indices; // scratch buffer for wall-site indices
+		thrust::device_vector<int> d_wall_site_indices; // wall-site indices (detect_wall), sized to fit
 		// active tiles (see vmc_tiles_kernel)
 		bool use_tiles;
 		float tile_eps;
@@ -382,8 +387,9 @@ class System{
 		int wall_first_index;
 		int wall_last_index;
 
-		int L;
-		int L2;
+		int Lx;   // along the wall (periodic)
+		int Ly;   // along the motion (anti-periodic)
+		int L2;   // Lx*Ly
 
 		float external_field;
 		int total_time;
@@ -395,29 +401,27 @@ class System{
 		unsigned long disorder_seed;
 		float *phi_ptr;
 
-		System(int _L, unsigned long _disorder_seed)
+		System(int _Lx, int _Ly, unsigned long _disorder_seed)
 		{
-			if(_L%2!=0){
-				std::cout << "ERROR: L must be even for checkerboard VMC" << std::endl;
+			if(_Lx%2!=0 || _Ly%2!=0){
+				std::cout << "ERROR: Lx and Ly must be even for checkerboard VMC" << std::endl;
 				exit(1);
 			}
 
-			L=_L;
-			L2=L*L;
+			Lx=_Lx;
+			Ly=_Ly;
+			L2=Lx*Ly;
 
 			d_phi = thrust::device_malloc<float>(L2);
 			d_saved = thrust::device_malloc<float>(L2);
 			d_snap = thrust::device_malloc<float>(L2);
 			phi_ptr = thrust::raw_pointer_cast(&d_phi[0]);
-			// every site can in principle be a wall site; L*10 could overflow
-			// for overhang-rich walls at strong disorder
-			d_wall_site_indices = thrust::device_malloc<int>(L2);
 
-			use_tiles = (L%TILE==0);
+			use_tiles = (Lx%TILE==0 && Ly%TILE==0);
 			tile_eps = TILE_EPS;
 			if(use_tiles){
-				d_active.resize((L/TILE)*(L/TILE));
-				d_changed.resize((L/TILE)*(L/TILE));
+				d_active.resize((Lx/TILE)*(Ly/TILE));
+				d_changed.resize((Lx/TILE)*(Ly/TILE));
 				d_work.resize(1,0);
 			}
 
@@ -425,13 +429,14 @@ class System{
 			total_time=0;
 			tolres=TOLRES;
 			last_converged=true;
-			max_sweeps=std::max((long)MAXSWEEPS,(long)MAXSWEEPS_PER_L*L);
+			max_sweeps=std::max((long)MAXSWEEPS,(long)MAXSWEEPS_PER_L*Lx);
 			disorder_seed=_disorder_seed;
 
 			reset_uniform();
 
 			std::ofstream log("logfile.dat");
-			log << "L= " << L << std::endl;
+			log << "L= " << Lx << std::endl;
+			log << "Ly= " << Ly << std::endl;
 			log << "disorder_seed= " << disorder_seed << std::endl;
 			log << "AMPDIS (Delta)= " << AMPDIS << std::endl;
 			log << "CEL (c)= " << CEL << std::endl;
@@ -447,17 +452,16 @@ class System{
 			thrust::device_free(d_phi);
 			thrust::device_free(d_saved);
 			thrust::device_free(d_snap);
-			thrust::device_free(d_wall_site_indices);
 		}
 
 		// flat interface: phi=+1 for y<y_level, phi=-1 for y>=y_level
 		void set_flat_interface(int y_level)
 		{
-			int split=y_level*L;
+			int split=y_level*Lx;
 			thrust::fill(d_phi, d_phi+split, 1);
 			thrust::fill(d_phi+split, d_phi+L2, -1);
 		};
-		void set_flat_interface(){ set_flat_interface(int(L*0.2)); }
+		void set_flat_interface(){ set_flat_interface(int(Ly*0.2)); }
 
 		void reset_uniform(){ thrust::fill(d_phi, d_phi+L2, -1.0f); };
 
@@ -478,19 +482,20 @@ class System{
 
 		void set_external_field(float h){ external_field=h; }
 		float get_external_field(){ return external_field; }
-		int get_L(){ return L; }
+		int get_L(){ return Lx; }
+		int get_Ly(){ return Ly; }
 		int get_total_time(){ return total_time; }
 
 		// whole-lattice sweeps instead of active tiles (for comparisons)
-		void set_use_tiles(bool t){ use_tiles = t && (L%TILE==0); }
+		void set_use_tiles(bool t){ use_tiles = t && (Lx%TILE==0 && Ly%TILE==0); }
 		bool get_use_tiles(){ return use_tiles; }
 		void set_tile_eps(float e){ tile_eps=e; }
 
-		// sweeps' worth of tile updates done so far (one sweep = 2*(L/TILE)^2)
+		// sweeps' worth of tile updates done so far (one sweep = 2*(Lx/TILE)*(Ly/TILE))
 		double tile_work(){
 			if(!use_tiles) return 0;
 			unsigned long long w=d_work[0];
-			return double(w)/(2.0*(L/TILE)*(L/TILE));
+			return double(w)/(2.0*(Lx/TILE)*(Ly/TILE));
 		}
 
 		// checkerboard VMC sweeps: num_sweeps sweeps of the lattice
@@ -504,7 +509,7 @@ class System{
 					thrust::for_each(
 						thrust::make_counting_iterator(0),
 						thrust::make_counting_iterator(half_L2),
-						vmcop(phi_ptr,L,external_field,color_offset,disorder_seed)
+						vmcop(phi_ptr,Lx,Ly,external_field,color_offset,disorder_seed)
 					);
 				}
 				total_time++;
@@ -516,7 +521,7 @@ class System{
 		// changed in between.
 		void dynamics_tiles(int num_sweeps)
 		{
-			int T=L/TILE, ntiles=T*T;
+			int Tx=Lx/TILE, Ty=Ly/TILE, ntiles=Tx*Ty;
 			unsigned char *active=thrust::raw_pointer_cast(d_active.data());
 			unsigned char *changed=thrust::raw_pointer_cast(d_changed.data());
 			unsigned long long *work=thrust::raw_pointer_cast(d_work.data());
@@ -525,26 +530,26 @@ class System{
 			{
 				for(int color_offset=0;color_offset<2;color_offset++){
 					cudaMemset(changed,0,ntiles);
-					vmc_tiles_kernel<<<ntiles,TILE*TILE/2>>>(phi_ptr,L,external_field,color_offset,
+					vmc_tiles_kernel<<<ntiles,TILE*TILE/2>>>(phi_ptr,Lx,Ly,external_field,color_offset,
 						disorder_seed,active,changed,work,tile_eps);
 					if(sweep==0 && color_offset==0) cudaMemset(active,1,ntiles);
-					else spread_activity<<<(ntiles+255)/256,256>>>(changed,active,T);
+					else spread_activity<<<(ntiles+255)/256,256>>>(changed,active,Tx,Ty);
 				}
 				total_time++;
 			}
 		}
 
 		// mean residual velocity <dphi/dt>, i.e. the paper's convergence
-		// diagnostic (note: normalized by L, not L2, matching the scale
+		// diagnostic (note: normalized by Lx, not L2, matching the scale
 		// at which TOLVEL was tuned)
 		float velocity_phi()
 		{
 			return thrust::transform_reduce(
 				thrust::make_counting_iterator(0),
 				thrust::make_counting_iterator(L2),
-				velocityop(phi_ptr,L,external_field,disorder_seed),
+				velocityop(phi_ptr,Lx,Ly,external_field,disorder_seed),
 				float(0.0), thrust::plus<float>()
-			)/float(L);
+			)/float(Lx);
 		}
 
 		// largest residual max_i |dphi_i/dt|: zero only at a genuine fixed
@@ -554,7 +559,7 @@ class System{
 			return thrust::transform_reduce(
 				thrust::make_counting_iterator(0),
 				thrust::make_counting_iterator(L2),
-				abs_velocityop(velocityop(phi_ptr,L,external_field,disorder_seed)),
+				abs_velocityop(velocityop(phi_ptr,Lx,Ly,external_field,disorder_seed)),
 				0.0f, thrust::maximum<float>());
 		}
 
@@ -562,14 +567,14 @@ class System{
 		// state has been reached: max_i |dphi_i/dt| < tolres. (With
 		// tolres=0, the legacy criterion: mean DW velocity < TOLVEL. That
 		// one is blind to a local avalanche of size l, which only adds
-		// ~l*v/L to the mean, so it can stop on a still-moving wall.)
+		// ~l*v/Lx to the mean, so it can stop on a still-moving wall.)
 		// Once max|dphi/dt| < tolres, it is confirmed by checking that no
 		// site moves more than CONFIRM_DPHI over the next CONFIRM_SWEEPS
 		// sweeps, which a wall in the saddle-node bottleneck still does.
 		// If escape_lane>0, also stops as soon as the interface has swept
-		// past row escape_lane*L (magnetization_lane>0): for bisection
+		// past row escape_lane*Ly (magnetization_lane>0): for bisection
 		// that already decides "depinned", so there's no need to relax
-		// the rest of the way (the wall ends up stuck at y=L). Gives up
+		// the rest of the way. Gives up
 		// after max_sweeps sweeps. Returns the number of sweeps done;
 		// converged() tells whether it stopped at a fixed point.
 		int find_next_metastable(int chop, float escape_lane=-1)
@@ -606,37 +611,38 @@ class System{
 
 		float magnetization(){ return thrust::reduce(d_phi,d_phi+L2); }
 
-		// max(phi) along row y=relative_y*L: >0 signals the interface has
+		// max(phi) along row y=relative_y*Ly: >0 signals the interface has
 		// swept past that row (used to bracket the depinning field)
 		float magnetization_lane(float relative_y)
 		{
-			int y=relative_y*L;
-			return thrust::reduce(d_phi+L*y,d_phi+L*(y+1),float(-10.),thrust::maximum<float>());
+			int y=relative_y*Ly;
+			return thrust::reduce(d_phi+Lx*y,d_phi+Lx*(y+1),float(-10.),thrust::maximum<float>());
 		}
 
-		float local_magnetization(int x, int y){ return d_phi[(x+L*y)]; }
+		float local_magnetization(int x, int y){ return d_phi[(x+Lx*y)]; }
 
 		thrust::tuple<int,int,int,int,int> detect_wall(int x1, int x2, int y1, int y2)
 		{
-			int num_wall_points = int(
-				thrust::copy_if(
-					thrust::make_counting_iterator(0),
-					thrust::make_counting_iterator(L2),
-					d_wall_site_indices, is_wall_smooth(phi_ptr,L,x1,x2,y1,y2)
-				) - d_wall_site_indices
-			);
+			// counted first, so the buffer is only as large as the wall
+			// (rather than a whole extra field's worth of GPU memory)
+			is_wall_smooth is_wall(phi_ptr,Lx,Ly,x1,x2,y1,y2);
+			int num_wall_points = thrust::count_if(
+				thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2), is_wall);
+			d_wall_site_indices.resize(num_wall_points);
+			thrust::copy_if(thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2),
+				d_wall_site_indices.begin(), is_wall);
 
 			int area_positive = thrust::count_if(thrust::device, phi_ptr, phi_ptr+L2, is_positive());
 			int area_negative = L2 - area_positive;
 
-			thrust::pair<thrust::device_ptr<int>, thrust::device_ptr<int> > result =
-				thrust::minmax_element(d_wall_site_indices, d_wall_site_indices+num_wall_points);
+			thrust::pair<thrust::device_vector<int>::iterator, thrust::device_vector<int>::iterator> result =
+				thrust::minmax_element(d_wall_site_indices.begin(), d_wall_site_indices.end());
 
-			wall_last_index=(result.second)[0];
-			wall_first_index=(result.first)[0];
+			wall_last_index = num_wall_points ? int(*result.second) : -1;
+			wall_first_index = num_wall_points ? int(*result.first) : -1;
 
-			int last_y=int(wall_last_index/L);
-			int first_y=int(wall_first_index/L);
+			int last_y=int(wall_last_index/Lx);
+			int first_y=int(wall_first_index/Lx);
 
 			return thrust::tuple<int,int,int,int,int>(num_wall_points,area_positive,area_negative,first_y,last_y);
 		}
@@ -655,12 +661,13 @@ class System{
 			fout << "# " << num_wall_points << " " << area_positive << " " << area_negative
 				<< " " << wall_first_index << " " << wall_last_index << std::endl;
 
-			thrust::host_vector<int> wall_points(num_wall_points);
-			thrust::copy(d_wall_site_indices,d_wall_site_indices+num_wall_points,wall_points.begin());
+			thrust::host_vector<int> wall_points(d_wall_site_indices);
+			d_wall_site_indices.clear();
+			d_wall_site_indices.shrink_to_fit();
 
 			for(int i=0;i<num_wall_points;i++){
-				int x=wall_points[i]%L;
-				int y=int(wall_points[i]/L);
+				int x=wall_points[i]%Lx;
+				int y=int(wall_points[i]/Lx);
 				fout << x << " " << y << std::endl;
 			}
 			fout << std::endl << std::endl;
@@ -668,29 +675,29 @@ class System{
 			return num_wall_points;
 		}
 
-		// per-row and per-column magnetization profile of the whole field
+		// per-column and per-row magnetization profile of the whole field:
+		// line i holds column i's and row i's sums (nan past Lx or Ly).
+		// Computed on the host, so it costs no GPU memory.
 		void print_magnetization_profile(std::ofstream &fout)
 		{
-			thrust::device_vector<int> x_index(L2);
-			thrust::device_vector<int> y_index(L2);
-			thrust::device_vector<float> mag_sorted(d_phi,d_phi+L2);
-			thrust::device_vector<float> mag_by_x(L);
-			thrust::device_vector<float> mag_by_y(L);
-
-			using namespace thrust::placeholders;
-			thrust::transform(thrust::make_counting_iterator(0),thrust::make_counting_iterator(L2),x_index.begin(),_1%L);
-			thrust::transform(thrust::make_counting_iterator(0),thrust::make_counting_iterator(L2),y_index.begin(),_1/L);
-
-			thrust::reduce_by_key(y_index.begin(),y_index.end(),mag_sorted.begin(),thrust::make_discard_iterator(),mag_by_y.begin());
-
-			thrust::sort_by_key(x_index.begin(),x_index.end(),mag_sorted.begin());
-			thrust::reduce_by_key(x_index.begin(),x_index.end(),mag_sorted.begin(),thrust::make_discard_iterator(),mag_by_x.begin());
-
-			for(int i=0;i<L;i++) fout << mag_by_x[i] << " " << mag_by_y[i] << std::endl;
+			thrust::host_vector<float> h_phi(d_phi,d_phi+L2);
+			std::vector<double> mag_by_x(Lx,0.0), mag_by_y(Ly,0.0);
+			for(int y=0;y<Ly;y++)
+				for(int x=0;x<Lx;x++){
+					float v=h_phi[x+(size_t)Lx*y];
+					mag_by_x[x]+=v; mag_by_y[y]+=v;
+				}
+			for(int i=0;i<std::max(Lx,Ly);i++){
+				if(i<Lx) fout << float(mag_by_x[i]); else fout << "nan";
+				fout << " ";
+				if(i<Ly) fout << float(mag_by_y[i]); else fout << "nan";
+				fout << std::endl;
+			}
 			fout << "\n" << std::endl;
 		}
 
-		// raw float32 dump of the whole field, row-major (index x+y*L), for
+		// raw float32 dump of the whole field, row-major (index x+y*Lx, Ly
+		// rows of Lx), for
 		// offline contour extraction (scripts/wall_contour.py); fout must be
 		// opened in binary mode
 		void print_field_binary(std::ofstream &fout)
@@ -709,9 +716,9 @@ class System{
 
 		void print_config(std::ofstream &fout)
 		{
-			for(int i=0;i<L;i++){
-				for(int j=0;j<L-1;j++) fout << d_phi[j+i*L] << " ";
-				fout << d_phi[L-1+i*L] << "\n";
+			for(int i=0;i<Ly;i++){
+				for(int j=0;j<Lx-1;j++) fout << d_phi[j+i*Lx] << " ";
+				fout << d_phi[Lx-1+i*Lx] << "\n";
 			}
 			fout << "\n" << std::endl;
 		}

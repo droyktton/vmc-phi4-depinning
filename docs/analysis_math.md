@@ -16,7 +16,7 @@ Reference: A. B. Kolton, E. E. Ferrero, A. Rosso, Phys. Rev. B **108**,
 
 ## 1. Model
 
-Scalar field $\phi(x,y)$ on an $L\times L$ lattice:
+Scalar field $\phi(x,y)$ on an $L_x\times L_y$ lattice ($L \equiv L_x$):
 
 ```math
 \partial_t \phi = c\,\nabla^2\phi + \epsilon_0\left[(1+r(x,y))\,\phi - \phi^3\right] + h
@@ -30,11 +30,27 @@ Scalar field $\phi(x,y)$ on an $L\times L$ lattice:
 - $c$ = `CEL`, $\epsilon_0$ = `EPSILON0` and $\Delta$ = `AMPDIS`; the
   runs use $c = \epsilon_0 = 1$.
 
-**Boundaries.** Periodic in $x$, $\phi(x+L,y) = \phi(x,y)$;
-anti-periodic in $y$, $\phi(x,y+L) = -\phi(x,y)$. With an anti-periodic
+**Boundaries.** Periodic in $x$, $\phi(x+L_x,y) = \phi(x,y)$;
+anti-periodic in $y$, $\phi(x,y+L_y) = -\phi(x,y)$. With an anti-periodic
 boundary any configuration has an odd number of walls, so there is
-always a wall spanning the sample. For $h>0$ the $\phi>0$ region lies
-below the wall and grows as $h$ increases.
+always a wall spanning the sample, and no fixed boundary that holds or
+pulls it. For $h>0$ the $\phi>0$ region lies below the wall and grows
+as $h$ increases. (Up to commit `9548076` the sign flip was applied to
+the wrong neighbour, the interior one, of the rows $y=0$ and $L_y-1$.
+That left a fixed defect at the seam, rows at $\phi\approx\mp0.24$, far
+from the wall: in a square box the $h_d$ of 20 seeds came out identical
+with either boundary.)
+
+**Box height.** The wall starts at $0.2L_y$ and escapes at $0.95L_y$, so
+$h_d$ is the strongest pinning met over a path $0.75L_y$ long, and it
+grows with $L_y$. The wall's vertical extent grows as $L_x^{\zeta}$, so
+for finite-size scaling the box keeps its shape in those units,
+$L_y = k\,L_x^{\zeta}$ with $\zeta = 1.25$ and fixed $k$ (`--ly-k`,
+rounded to a multiple of 32). A square box has $k = L^{-1/4}$, which
+shrinks with $L$. At $L=1024$ the extent of the critical wall is
+0.02–0.08 $L_x^{1.25}$ on average (Δ = 0.4–1.0), up to 0.12; going from
+the square box to $k=1$ raises $h_d$ by 2.9 % (Δ = 0.4) and 1 % (Δ = 1).
+With $k = 1$ the wall spans at most ~12 % of $L_y$.
 
 **Equilibrium states.** Without disorder or field the local minima are
 $\phi = \pm 1$. The flat wall is $\phi_0(y-u) = \tanh[(y-u)/\xi\sqrt2]$
@@ -153,9 +169,9 @@ For each trial $h$ (`find_depinning_field`):
 
 1. **Initial condition:** the last pinned state found (warm start,
    below). The first trial starts from the flat wall, $\phi = +1$ for
-   $y < 0.2L$ and $\phi=-1$ for $y \ge 0.2L$.
+   $y < 0.2L_y$ and $\phi=-1$ for $y \ge 0.2L_y$.
 2. **Relaxation** with the rule above, with an early exit: if the wall
-   crosses the row $y_e = 0.95L$, i.e. if $\max_x \phi(x, y_e) > 0$
+   crosses the row $y_e = 0.95L_y$, i.e. if $\max_x \phi(x, y_e) > 0$
    (`magnetization_lane`, `ESCAPE_LANE`), it stops there.
 3. **Classification:** the trial is *depinned* if
    $\max_x\phi(x,y_e) > 0$, and *pinned* otherwise.
@@ -182,7 +198,7 @@ $M(a)$ also ends at $M(h)$, or escapes if and only if the flat start
 escapes. Each trial therefore starts from the last pinned state, and
 after an escape that state is restored (`save_state`,
 `restore_state`). The wall only has to move from $M(a)$ to $M(h)$
-instead of all the way from $y=0.2L$, and the final step-back is no
+instead of all the way from $y=0.2L_y$, and the final step-back is no
 longer needed: the saved state at $a$ *is* the critical configuration.
 The ordering argument is not strict in the bulk, where the flat
 start's $\pm1$ differs from the relaxed $\pm\sqrt{1+r}$ either way;
@@ -203,7 +219,7 @@ neighbours and with $h$, and the threshold $\phi_2$ decreases.
 
 **Why the early exit doesn't change $h_d$.** With the anti-periodic
 boundary, the magnetisation $M = \sum\phi$ grows as the wall moves up
-and is largest with the wall at $y = L$. A depinned wall advances to
+and is largest with the wall at $y = L_y$. A depinned wall advances to
 there and converges, instead of circulating. Stopping once it crosses
 $y_e$ doesn't change the classification, since the decision is made on
 that row anyway. Pinned trials never cross $y_e$, so they relax exactly

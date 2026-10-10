@@ -15,8 +15,13 @@ the elastic approximation," Phys. Rev. B **108**, 174201 (2023)
 d phi/dt = c * Laplacian(phi) + eps0 * [ (1 + r(x,y)) * phi - phi^3 ] + h
 ```
 
-on an `L x L` grid, periodic in `x`, anti-periodic in `y` (so that the
-dynamics always hosts a single domain wall spanning the sample). The
+on an `Lx x Ly` grid, periodic in `x`, anti-periodic in `y` (so that the
+dynamics always hosts a single domain wall spanning the sample). `Lx`
+is the wall's length (the `L` argument); `Ly`, the room it has to move
+in, defaults to `Lx` but should scale as the wall's vertical extent,
+`Ly = k Lx^1.25` at fixed `k` (`--ly-k k`): a square box squeezes the
+wall more and more as `L` grows (it is `k = L^-0.25`), and since a
+longer path meets stronger pinning, `h_d` itself depends on `k`. The
 quenched disorder `r(x,y)` is an uncorrelated random-bond field, uniform
 in `[-Delta, Delta]` per site (`Delta` == `AMPDIS`). The paper sets
 `c = eps0 = 1` without loss of generality; these are the `CEL` and
@@ -42,7 +47,7 @@ critical configurations of the L=1024/2048 sweep still moving.
 
 `h_d` is located per sample by **bisection on h** (`find_depinning_field`
 in `main.cu`): whether the interface escapes the sample (the lane at
-0.95 L flips sign) or stays pinned determines the next bisection
+0.95 Ly flips sign) or stays pinned determines the next bisection
 interval. Each trial starts from the last pinned state (the first from
 a flat interface), and after an escape that state is restored. By
 Middleton's no-passing theorems that gives the same outcome as
@@ -95,6 +100,9 @@ rebuilding with a different `AMPDIS`.
   already fully determined without it.
 - `--dump-field`: also save the whole critical field `phi` (see below),
   needed for the arc-length analysis of `scripts/local_roughness.py`.
+- `--ly N` or `--ly-k k`: the box height (above). With `k = 1` the
+  critical wall spans at most ~12 % of `Ly` (L=512-1024, Delta=0.4-1.0),
+  against up to ~45 % in a square box at L=1024.
 - Checks and comparisons: `--verify-cold` (relax again from a flat
   interface at `h_d` and compare), `--no-warm` (every trial from a flat
   interface), `--no-tiles` (sweep the whole lattice), `--tolres x`
