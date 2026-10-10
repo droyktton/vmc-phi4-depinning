@@ -168,7 +168,7 @@ branch "is" h_d is a genuine protocol question, not a bug — so the
 The mathematics of the whole pipeline (model, VMC move and bisection,
 wall extraction, every roughness estimator, the l_o definitions and fits,
 the Larkin / two-crossover model) is written out in
-[docs/analisis_matematico.md](docs/analisis_matematico.md) (in Spanish).
+[docs/analysis_math.md](docs/analysis_math.md).
 
 ### Depinning field statistics and structure factor (Python)
 
