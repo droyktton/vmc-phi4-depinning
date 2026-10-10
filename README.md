@@ -303,6 +303,20 @@ DELTAS="0.4 0.5 0.6 0.7 0.85 1.0" LS="1024 2048" NSAMPLES=30 \
 (`zeta_local_L*.png`, `crossover_indicators_L*.png`, `collapse_*.png`,
 `lo_vs_delta.png`).
 
+`scripts/fit_crossovers.py` (run after `local_roughness.py`, it reads
+its per-sample cache) addresses why the local exponent of `W2(l)` shows
+no qEW plateau: the qEW window sits between the Larkin length
+`L_c ~ Delta^-2/3` (below it `zeta_L = 1.5`) and `l_o`. It collapses the
+small-scale part of `zeta_W(l)` across `Delta` (shifts `~ Delta^-x_c`),
+and fits all `(L, Delta)` curves to a two-crossover model (logistic steps
+in `ln l` at `L_c` and `l_o`) to get the qEW exponent `zeta_q` without a
+plateau. Outputs `crossover_fit.dat`, `collapse_larkin.png`,
+`crossover_fit.png`.
+
+```
+python3 scripts/fit_crossovers.py data/sweep/L*_D* --outdir data/sweep/analysis --alpha-fixed 2.1
+```
+
 `scripts/synthetic_profiles.py` runs the same estimators on Gaussian
 profiles with a known `zeta1 -> zeta2` crossover at a known `l_o`, to
 calibrate them. What it shows:
