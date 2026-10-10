@@ -7,9 +7,9 @@
 // approximation: pinch-off, overhangs and structure factor").
 //
 // Method: bisection on the external field h. For each trial h, the
-// interface is relaxed to a metastable state; escape is detected as the
-// lane at ESCAPE_LANE*Ly flipping sign, at which point that trial's
-// relaxation is stopped early. Bisection stops at |h_high-h_low|<tol,
+// interface is relaxed to a metastable state; escape is detected at
+// the row escape_row (below), at which point that trial's relaxation is
+// stopped early. Bisection stops at |h_high-h_low|<tol,
 // giving h_d = h_low (the largest field found pinned).
 //
 // Warm starts: the VMC map is monotone (no-passing), so the metastable
@@ -17,18 +17,26 @@
 // state X with flat <= X <= M(h). The pinned state M(a) at a field a<h
 // is such a state, so each trial starts from the last pinned state
 // instead of from the flat interface: the wall only has to move from
-// M(a) to M(h), not all the way from y=0.2Ly. After an escape, the last
+// M(a) to M(h), not all the way from its starting row. After an escape, the last
 // pinned state is restored. (flat <= M(a) only holds up to the bulk
 // sites, which relax within a few sweeps, so this is checked: at the end,
 // --verify-cold relaxes again from the flat interface at h_d and
 // compares; see docs/analysis_math.md, section 2.3.)
 //
 // Geometry: Lx (along the wall, periodic) by Ly (along the motion,
-// anti-periodic). The wall starts flat at y=0.2Ly and escapes at
-// 0.95Ly, so it can explore 0.75Ly. Since the wall's vertical extent
-// grows as Lx^zeta, finite-size scaling needs Ly = k Lx^zeta at fixed k
-// (--ly-k; zeta = LY_ZETA = 1.25, qEW). A square box (the default) has
-// k = Lx^-0.25, which shrinks with Lx.
+// anti-periodic). By default the wall starts flat at y=0.2Ly and has
+// escaped once some site of row 0.95Ly flips, so it explores 0.75Ly;
+// Ly is --ly, or k Lx^zeta with --ly-k (zeta = LY_ZETA = 1.25, qEW).
+// That censors wide critical walls: if the strongest pinning lies just
+// below the escape row, a protrusion reaches it and the trial counts as
+// depinned. With --path P --headroom H instead, the wall starts at
+// y0 (--y0, default 32), escapes once *all* of row y0+P has flipped,
+// and Ly = y0+P+H: a pinned wall may stick out up to H above the escape
+// row. P sets the finite-size regime (the aspect ratio P/w, w the
+// wall's width; Kolton et al., arXiv:1308.4329), H must exceed the
+// widest critical wall. The critical wall's rows are reported, with a
+// WARNING if it comes within WALL_MARGIN rows of the escape row
+// (legacy criterion) or of Ly (--path).
 //
 // Around h_d, scan_magnetization_jumps() additionally records the
 // metastable-state sequence (magnetization jumps / "avalanches") on a
@@ -44,9 +52,10 @@
 #include <chrono>
 #include "misistema.h"
 
-// a trial field is "depinned" once the interface sweeps past this row
-// (relative height); relaxation stops early as soon as it does
-#define ESCAPE_LANE 0.95
+// --y0 default, and how close (in rows) the critical wall may come to
+// the escape row (legacy) or to Ly (--path) before a WARNING
+#define Y0_DEFAULT 32
+#define WALL_MARGIN 32
 
 // relaxation is checked every CHOP sweeps
 #define CHOP 1000
@@ -62,8 +71,8 @@ bool depins(System *sys, float h, const char *stage)
 	std::chrono::steady_clock::time_point t0=std::chrono::steady_clock::now();
 	double work0=sys->tile_work();
 	sys->set_external_field(h);
-	int sweeps=sys->find_next_metastable(CHOP,ESCAPE_LANE);
-	bool escaped=sys->magnetization_lane(ESCAPE_LANE)>0;
+	int sweeps=sys->find_next_metastable(CHOP,true);
+	bool escaped=sys->escaped();
 	bool capped=!escaped && !sys->converged();
 	if(capped && sys->get_tolres()>0) escaped=true;
 	double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
@@ -136,6 +145,16 @@ float find_depinning_field(float h_low, float h_high, float tol, System *sys, bo
 	char filename[100];
 	int Lx=sys->get_L(), Ly=sys->get_Ly();
 
+	// how close the critical wall gets to where it would be cut off
+	thrust::pair<int,int> rows=sys->wall_rows();
+	int limit = sys->get_escape_full() ? Ly-1 : sys->get_escape_row();
+	std::cout << "wall rows: bottom=" << rows.first << " top=" << rows.second
+		<< " extent=" << rows.second-rows.first << " margin=" << limit-rows.second
+		<< " (to " << (sys->get_escape_full() ? "Ly" : "the escape row") << ")" << std::endl;
+	if(limit-rows.second<WALL_MARGIN)
+		std::cout << "WARNING: critical wall within " << WALL_MARGIN << " rows of "
+			<< (sys->get_escape_full() ? "Ly" : "the escape row") << ": possibly censored" << std::endl;
+
 	sprintf(filename,"critica_h%f_seed%lu.dat",a,sys->disorder_seed);
 	std::ofstream critical_wall_out(filename);
 	sys->print_wall(critical_wall_out,0,Lx,int(Ly*0.01),int(Ly*0.99));
@@ -194,7 +213,7 @@ int main(int argc, char **argv)
 	int L; float h_low,h_high,tol; unsigned long disorder_seed;
 	bool with_magjumps=false, dump_field=false, verify_cold=false, bad_flag=false;
 	float tolres=-1, tile_eps=-1, ly_k=-1;
-	int Ly=-1;
+	int Ly=-1, path=-1, headroom=-1, y0=Y0_DEFAULT;
 	std::string relax_from;
 	bool no_warm=false, no_tiles=false;
 	for(int i=6;i<argc;i++){
@@ -209,8 +228,13 @@ int main(int argc, char **argv)
 		else if(flag=="--tolres" && i+1<argc) tolres=atof(argv[++i]);
 		else if(flag=="--ly" && i+1<argc) Ly=atoi(argv[++i]);
 		else if(flag=="--ly-k" && i+1<argc) ly_k=atof(argv[++i]);
+		else if(flag=="--path" && i+1<argc) path=atoi(argv[++i]);
+		else if(flag=="--headroom" && i+1<argc) headroom=atoi(argv[++i]);
+		else if(flag=="--y0" && i+1<argc) y0=atoi(argv[++i]);
 		else bad_flag=true;
 	}
+	// --path and --headroom go together, and replace --ly/--ly-k
+	if((path>0)!=(headroom>0) || (path>0 && (Ly>0 || ly_k>0))) bad_flag=true;
 	if(argc>=6 && !bad_flag){
 		L=atoi(argv[1]);
 		h_low=atof(argv[2]);
@@ -236,15 +260,25 @@ int main(int argc, char **argv)
 		std::cout << "  --ly N          lattice size Ly along the motion (default: Lx)" << std::endl;
 		std::cout << "  --ly-k k        Ly = k*Lx^" << LY_ZETA << ", rounded to a multiple of 32 (keeps the box's" << std::endl;
 		std::cout << "                  shape scaled with the wall's roughness across Lx)" << std::endl;
+		std::cout << "                  (both: start at 0.2Ly, depinned once some site of row 0.95Ly flips)" << std::endl;
+		std::cout << "  --path P --headroom H [--y0 Y]  instead: start at row Y (default " << Y0_DEFAULT << "), depinned once" << std::endl;
+		std::cout << "                  all of row Y+P has flipped, Ly = Y+P+H rounded up to a multiple of 32" << std::endl;
 		std::cout << "  --tolres x      convergence cutoff on max|dphi/dt| (default " << TOLRES << "; 0: legacy mean-velocity criterion)" << std::endl;
 		std::cout << "example: " << argv[0] << " 256 0.0 0.1 0.0001 1234" << std::endl;
 		return 1;
 	}
 
 	if(ly_k>0) Ly=32*std::max(1,int(lround(ly_k*pow(double(L),LY_ZETA)/32)));
+	if(path>0) Ly=32*int((long(y0)+path+headroom+31)/32);
 	if(Ly<=0) Ly=L;
-	std::cout << "Lx=" << L << " Ly=" << Ly << std::endl;
+	if(double(L)*Ly>=2147483648.0){
+		std::cerr << "ERROR: Lx*Ly = " << double(L)*Ly << " overflows the 32-bit site index" << std::endl;
+		return 1;
+	}
 	System sys(L,Ly,disorder_seed);
+	if(path>0) sys.set_geometry(y0,y0+path,true);
+	std::cout << "Lx=" << L << " Ly=" << Ly << " start=" << sys.get_y_start() << " escape_row=" << sys.get_escape_row()
+		<< " criterion=" << (sys.get_escape_full() ? "whole row" : "any site") << std::endl;
 	if(tolres>=0) sys.set_tolres(tolres);
 	if(no_tiles) sys.set_use_tiles(false);
 	if(tile_eps>=0) sys.set_tile_eps(tile_eps);

@@ -367,6 +367,16 @@ struct abs_diff
 	float operator()(const thrust::tuple<float,float> &t){ return fabsf(thrust::get<0>(t)-thrust::get<1>(t)); }
 };
 
+// row of site i if phi_i has the given sign, else a neutral value
+struct row_if_sign
+{
+	float *phi;
+	int Lx, sign, neutral;
+	row_if_sign(float *_phi, int _Lx, int _sign, int _neutral):phi(_phi),Lx(_Lx),sign(_sign),neutral(_neutral){};
+	__device__
+	int operator()(int i){ return phi[i]*sign>0 ? i/Lx : neutral; }
+};
+
 struct is_positive
 {
 	__host__ __device__
@@ -396,6 +406,13 @@ class System{
 		float tolres;
 		bool last_converged; // did the last find_next_metastable converge?
 		long max_sweeps;     // its cap
+		// geometry of a trial: the wall starts flat at row y_start and has
+		// escaped once it crosses row escape_row: some site of the row
+		// (escape_full=false, the legacy criterion) or every site of it
+		// (escape_full=true; a pinned wall may then stick out above
+		// escape_row, into the headroom below Ly)
+		int y_start, escape_row;
+		bool escape_full;
 
 	public:
 		unsigned long disorder_seed;
@@ -430,6 +447,9 @@ class System{
 			tolres=TOLRES;
 			last_converged=true;
 			max_sweeps=std::max((long)MAXSWEEPS,(long)MAXSWEEPS_PER_L*Lx);
+			y_start=int(Ly*0.2);
+			escape_row=int(0.95f*Ly);
+			escape_full=false;
 			disorder_seed=_disorder_seed;
 
 			reset_uniform();
@@ -461,7 +481,15 @@ class System{
 			thrust::fill(d_phi, d_phi+split, 1);
 			thrust::fill(d_phi+split, d_phi+L2, -1);
 		};
-		void set_flat_interface(){ set_flat_interface(int(Ly*0.2)); }
+		void set_flat_interface(){ set_flat_interface(y_start); }
+
+		void set_geometry(int _y_start, int _escape_row, bool _escape_full)
+		{
+			y_start=_y_start; escape_row=_escape_row; escape_full=_escape_full;
+		}
+		int get_y_start(){ return y_start; }
+		int get_escape_row(){ return escape_row; }
+		bool get_escape_full(){ return escape_full; }
 
 		void reset_uniform(){ thrust::fill(d_phi, d_phi+L2, -1.0f); };
 
@@ -571,13 +599,12 @@ class System{
 		// Once max|dphi/dt| < tolres, it is confirmed by checking that no
 		// site moves more than CONFIRM_DPHI over the next CONFIRM_SWEEPS
 		// sweeps, which a wall in the saddle-node bottleneck still does.
-		// If escape_lane>0, also stops as soon as the interface has swept
-		// past row escape_lane*Ly (magnetization_lane>0): for bisection
-		// that already decides "depinned", so there's no need to relax
-		// the rest of the way. Gives up
-		// after max_sweeps sweeps. Returns the number of sweeps done;
-		// converged() tells whether it stopped at a fixed point.
-		int find_next_metastable(int chop, float escape_lane=-1)
+		// If check_escape, also stops as soon as the interface has
+		// escaped (escaped()): for bisection that already decides
+		// "depinned", so there's no need to relax the rest of the way.
+		// Gives up after max_sweeps sweeps. Returns the number of sweeps
+		// done; converged() tells whether it stopped at a fixed point.
+		int find_next_metastable(int chop, bool check_escape=false)
 		{
 			bool moving;
 			int iterations=0;
@@ -601,7 +628,7 @@ class System{
 					}
 				}
 				else moving = fabs(velocity_phi())>TOLVEL;
-				if(escape_lane>0 && magnetization_lane(escape_lane)>0) break;
+				if(check_escape && escaped()) break;
 			}while(moving && (long)iterations*chop<max_sweeps);
 
 			last_converged=!moving;
@@ -611,12 +638,24 @@ class System{
 
 		float magnetization(){ return thrust::reduce(d_phi,d_phi+L2); }
 
-		// max(phi) along row y=relative_y*Ly: >0 signals the interface has
-		// swept past that row (used to bracket the depinning field)
-		float magnetization_lane(float relative_y)
+		// max / min of phi along row y: max>0 means the wall has reached
+		// that row somewhere, min>0 that all of it has swept past
+		float row_max(int y){ return thrust::reduce(d_phi+Lx*y,d_phi+Lx*(y+1),float(-10.),thrust::maximum<float>()); }
+		float row_min(int y){ return thrust::reduce(d_phi+Lx*y,d_phi+Lx*(y+1),float(10.),thrust::minimum<float>()); }
+
+		// has the interface escaped (see escape_row)?
+		bool escaped(){ return escape_full ? row_min(escape_row)>0 : row_max(escape_row)>0; }
+
+		// rows spanned by the wall: (lowest row with some phi<0, highest
+		// row with some phi>0); the first also catches phi<0 bubbles left
+		// behind, the second is the top of the wall
+		thrust::pair<int,int> wall_rows()
 		{
-			int y=relative_y*Ly;
-			return thrust::reduce(d_phi+Lx*y,d_phi+Lx*(y+1),float(-10.),thrust::maximum<float>());
+			int bottom=thrust::transform_reduce(thrust::make_counting_iterator(0),thrust::make_counting_iterator(L2),
+				row_if_sign(phi_ptr,Lx,-1,Ly),Ly,thrust::minimum<int>());
+			int top=thrust::transform_reduce(thrust::make_counting_iterator(0),thrust::make_counting_iterator(L2),
+				row_if_sign(phi_ptr,Lx,+1,-1),-1,thrust::maximum<int>());
+			return thrust::make_pair(bottom,top);
 		}
 
 		float local_magnetization(int x, int y){ return d_phi[(x+Lx*y)]; }

@@ -52,6 +52,41 @@ shrinks with $L$. At $L=1024$ the extent of the critical wall is
 the square box to $k=1$ raises $h_d$ by 2.9 % (Δ = 0.4) and 1 % (Δ = 1).
 With $k = 1$ the wall spans at most ~12 % of $L_y$.
 
+**Path, headroom and censoring.** Two things in that geometry bias the
+sample of critical walls:
+
+- **The aspect ratio sets a finite-size regime** (Kolton, Bustingorry,
+  Ferrero, Rosso, arXiv:1308.4329). A short path biases $\langle h_d\rangle$
+  low. A long one makes $h_d$ an extreme over many independent stretches,
+  and selects rare, wide critical walls. In between there is a $\kappa^*$
+  where finite-size effects are smallest. Because of the Larkin and
+  multivalued regimes, the right measure is the path over the wall's
+  width, $\kappa = P/w(L_x,\Delta)$, not $L_y/L_x^{1.25}$.
+- **The legacy escape test censors wide walls.** That test fires as soon
+  as *some* site crosses $y_e$. If a sample's strongest pinning lies just
+  below $y_e$, a protrusion reaches it, the trial counts as depinned, and
+  the sample ends up with a weaker pinning further down. This is more
+  likely the wider the wall, so the widest critical walls are the ones
+  lost.
+
+With `--path P --headroom H` the wall starts at $y_0$ (32 rows above the
+seam) and has escaped once *all* of row $y_e = y_0+P$ has flipped. Since
+the motion is monotone, it can't come back after that. $L_y = y_0+P+H$,
+so a pinned wall may stick out up to $H$ above $y_e$. If $H$ is too
+small, the tip reaches $L_y$ and is held by the seam. The trial then
+counts as pinned and $h_d$ comes out high: on one seed of $L=512$,
+Δ = 1, $P = 912$, it was 0.06718 with $H = 64$–256 against 0.06664 with
+$H = 512$.
+
+The solver reports the critical wall's rows and warns when it comes
+within 32 rows of $L_y$. `run_batch.py --adapt-headroom` then solves that
+seed again with twice the headroom. The disorder of a site is keyed by
+$x + L_x y$, which doesn't depend on $L_y$, so it is the same sample and
+the same path: nothing is discarded, which would bias against wide walls.
+On $L=512$, Δ = 1 with 30 seeds and a starting $H = 64$, 5 seeds needed
+$H$ = 256–512. All 30 $h_d$ then agreed with a run at $H = 2000$, with
+extents up to 387 rows ≈ 0.4 P.
+
 **Equilibrium states.** Without disorder or field the local minima are
 $\phi = \pm 1$. The flat wall is $\phi_0(y-u) = \tanh[(y-u)/\xi\sqrt2]$
 (with the sign set by the boundary), of width $\xi = \sqrt{c/\epsilon_0}$
@@ -170,11 +205,13 @@ For each trial $h$ (`find_depinning_field`):
 1. **Initial condition:** the last pinned state found (warm start,
    below). The first trial starts from the flat wall, $\phi = +1$ for
    $y < 0.2L_y$ and $\phi=-1$ for $y \ge 0.2L_y$.
-2. **Relaxation** with the rule above, with an early exit: if the wall
-   crosses the row $y_e = 0.95L_y$, i.e. if $\max_x \phi(x, y_e) > 0$
-   (`magnetization_lane`, `ESCAPE_LANE`), it stops there.
-3. **Classification:** the trial is *depinned* if
-   $\max_x\phi(x,y_e) > 0$, and *pinned* otherwise.
+2. **Relaxation** with the rule above, with an early exit once the wall
+   has escaped (`System::escaped`). By default that means it reaches the
+   row $y_e = 0.95L_y$ somewhere, $\max_x \phi(x, y_e) > 0$. With
+   `--path`, it means it has crossed $y_e = y_0+P$ everywhere,
+   $\min_x \phi(x, y_e) > 0$ (see §1).
+3. **Classification:** the trial is *depinned* if it escaped, and
+   *pinned* otherwise.
 
 First the ends are checked: $h_{\rm low}$ must be pinned (if not, it is
 divided by 1.5) and $h_{\rm high}$ depinned (if not, it becomes the new

@@ -102,7 +102,17 @@ rebuilding with a different `AMPDIS`.
   needed for the arc-length analysis of `scripts/local_roughness.py`.
 - `--ly N` or `--ly-k k`: the box height (above). With `k = 1` the
   critical wall spans at most ~12 % of `Ly` (L=512-1024, Delta=0.4-1.0),
-  against up to ~45 % in a square box at L=1024.
+  against up to ~45 % in a square box at L=1024. Both keep the legacy
+  escape test (some site of row 0.95 Ly flips), which censors wide
+  critical walls whose strongest pinning lies just below that row.
+- `--path P --headroom H [--y0 Y]`: start at row `Y` (default 32), and
+  count the trial as depinned once *all* of row `Y+P` has flipped;
+  `Ly = Y+P+H`. `P` sets the finite-size regime (path over wall width,
+  arXiv:1308.4329), and `H` must exceed the widest critical wall. The
+  solver prints the critical wall's rows and a `WARNING` when it comes
+  within 32 rows of `Ly`. `run_batch.py --adapt-headroom` then solves that
+  seed again with twice the headroom: the disorder doesn't depend on
+  `Ly`, so it is the same sample. See `docs/analysis_math.md` §1.
 - Checks and comparisons: `--verify-cold` (relax again from a flat
   interface at `h_d` and compare), `--no-warm` (every trial from a flat
   interface), `--no-tiles` (sweep the whole lattice), `--tolres x`

@@ -17,24 +17,25 @@ Example:
 import argparse
 import csv
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 HD_LINE = re.compile(r"depinning field h_d = ([-\d.eE+]+)")
+LY_LINE = re.compile(r"Lx=\d+ Ly=(\d+)")
 
 
 def run_one(binary, L, h_low, h_high, tol, seed, cwd, with_magjumps=False, dump_field=False, verbose=True,
-            ly_k=None):
-    cmd = [str(binary), str(L), str(h_low), str(h_high), str(tol), str(seed)]
-    if ly_k:
-        cmd += ["--ly-k", str(ly_k)]
+            box_args=()):
+    """Returns (h_d, the solver's WARNING lines, Ly)."""
+    cmd = [str(binary), str(L), str(h_low), str(h_high), str(tol), str(seed), *box_args]
     if with_magjumps:
         cmd.append("--with-magjumps")
     if dump_field:
         cmd.append("--dump-field")
     # the solver's per-trial progress lines are passed through as they come
-    hd = None
+    hd, warnings, ly = None, [], None
     with subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as proc:
         for line in proc.stdout:
             if verbose:
@@ -42,11 +43,41 @@ def run_one(binary, L, h_low, h_high, tol, seed, cwd, with_magjumps=False, dump_
             match = HD_LINE.search(line)
             if match:
                 hd = float(match.group(1))
+            if line.startswith("WARNING"):
+                warnings.append(line.strip())
+            match = LY_LINE.search(line)
+            if match:
+                ly = int(match.group(1))
     if proc.returncode != 0:
         raise RuntimeError(f"seed {seed} failed (exit {proc.returncode})")
     if hd is None:
         raise RuntimeError(f"seed {seed}: could not find h_d in output")
-    return hd
+    return hd, warnings, ly
+
+
+def solve_adaptive(binary, args, seed, outdir, max_headroom):
+    """Solves seed with --path/--headroom, doubling the headroom while the
+    critical wall comes close to Ly. Each attempt runs in its own
+    directory; the accepted one's files are moved to outdir.
+    Returns (h_d, warnings, headroom, attempts, Ly)."""
+    headroom, attempts = args.headroom, 0
+    tmp = outdir / f"tmp_seed{seed}"
+    while True:
+        attempts += 1
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        tmp.mkdir()
+        box_args = ["--path", str(args.path), "--headroom", str(headroom)]
+        hd, warnings, ly = run_one(binary, args.L, args.h_low, args.h_high, args.tol, seed, cwd=tmp,
+                                   with_magjumps=args.with_magjumps, dump_field=args.dump_field, box_args=box_args)
+        if not warnings or 2 * headroom > max_headroom:
+            break
+        print(f"seed {seed}: critical wall near Ly with headroom {headroom}, solving again with {2 * headroom}")
+        headroom *= 2
+    for f in tmp.iterdir():
+        shutil.move(str(f), str(outdir / f.name))
+    tmp.rmdir()
+    return hd, warnings, headroom, attempts, ly
 
 
 def main():
@@ -60,6 +91,15 @@ def main():
     p.add_argument("--seed-start", type=int, default=1)
     p.add_argument("--ly-k", type=float, default=None,
                    help="Ly = k*L^1.25 (see ./phi4vmc --help); default: square L x L")
+    p.add_argument("--path", type=int, default=None,
+                   help="with --headroom: whole-row escape after P rows, Ly = 32+P+H (see ./phi4vmc --help)")
+    p.add_argument("--headroom", type=int, default=None)
+    p.add_argument("--adapt-headroom", action="store_true",
+                   help="if a sample's critical wall comes close to Ly (WARNING), solve that seed again with twice "
+                        "the headroom, up to --max-headroom. The disorder of a site doesn't depend on Ly, so it is "
+                        "the same sample, and since the path (escape row) is kept, the same finite-size regime. "
+                        "Each attempt runs in outdir/tmp_seed<N>/; headroom.csv records the headroom used.")
+    p.add_argument("--max-headroom", type=int, default=None, help="cap for --adapt-headroom (default: 16 x --headroom)")
     p.add_argument("--outdir", required=True)
     p.add_argument("--with-magjumps", action="store_true",
                     help="also run the magnetization-jump scan near h_d for each sample (see ./phi4vmc --help)")
@@ -67,6 +107,16 @@ def main():
                     help="also save each critical field phi as raw float32 (criticafield_h*_seed*.bin, L*L*4 bytes), "
                          "needed by local_roughness.py")
     args = p.parse_args()
+    if (args.path is None) != (args.headroom is None):
+        p.error("--path and --headroom go together")
+    if args.adapt_headroom and args.path is None:
+        p.error("--adapt-headroom needs --path and --headroom")
+    max_headroom = args.max_headroom or 16 * (args.headroom or 0)
+    box_args = []
+    if args.ly_k:
+        box_args += ["--ly-k", str(args.ly_k)]
+    if args.path is not None:
+        box_args += ["--path", str(args.path), "--headroom", str(args.headroom)]
 
     binary = Path(args.binary).resolve()
     if not binary.exists():
@@ -82,6 +132,7 @@ def main():
             done_seeds = {int(row["seed"]) for row in csv.DictReader(f)}
 
     write_header = not summary_path.exists()
+    n_warned = 0
     with open(summary_path, "a", newline="") as f:
         writer = csv.writer(f)
         if write_header:
@@ -91,13 +142,30 @@ def main():
             if seed in done_seeds:
                 print(f"seed {seed}: already done, skipping")
                 continue
-            hd = run_one(binary, args.L, args.h_low, args.h_high, args.tol, seed, cwd=outdir,
-                         with_magjumps=args.with_magjumps, dump_field=args.dump_field, ly_k=args.ly_k)
+            if args.adapt_headroom:
+                hd, warnings, headroom, attempts, ly = solve_adaptive(binary, args, seed, outdir, max_headroom)
+                new_file = not (outdir / "headroom.csv").exists()
+                with open(outdir / "headroom.csv", "a") as hf:
+                    if new_file:
+                        hf.write("seed,headroom,attempts,Ly,warning\n")
+                    hf.write(f"{seed},{headroom},{attempts},{ly},{int(bool(warnings))}\n")
+            else:
+                hd, warnings, _ = run_one(binary, args.L, args.h_low, args.h_high, args.tol, seed, cwd=outdir,
+                                          with_magjumps=args.with_magjumps, dump_field=args.dump_field,
+                                          box_args=box_args)
+            if warnings:
+                # the critical wall came close to where it would be cut off
+                with open(outdir / "warnings.txt", "a") as wf:
+                    for w in warnings:
+                        wf.write(f"seed {seed}: {w}\n")
+                n_warned += 1
             print(f"seed {seed}: h_d = {hd:.6f}")
             writer.writerow([seed, hd])
             f.flush()
 
     print(f"\nsummary written to {summary_path}")
+    if n_warned:
+        print(f"{n_warned} sample(s) with a WARNING this run, see {outdir / 'warnings.txt'}")
 
 
 if __name__ == "__main__":
