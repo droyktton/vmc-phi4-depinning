@@ -158,14 +158,13 @@ Two things keep this bounded rather than unpredictable:
   avalanche scan probes 100 fields all within 5% of `h_d`, i.e.
   deliberately in the slow region, and was the dominant cost at large
   `L` even after the fix below.
-- **`MAXITERATIONS`** (`misistema.h`) caps how long
-  `find_next_metastable` will wait for a trial field to either converge
-  (pinned) or be ruled out (depinning) before giving up — 5000
-  "chop"-sweep blocks (5×10⁵ sweeps), a >60x margin over the slowest
-  genuine convergence observed empirically. The original value (1e6
-  blocks, i.e. 1e8 sweeps) was, in practice, an unbounded wait — tens
-  of hours at observed throughput — which is what made `L=1024`/`2048`
-  runs hang indefinitely before this was tuned down.
+- **`MAXSWEEPS`** (`misistema.h`) caps how long `find_next_metastable`
+  waits for a trial to converge or escape: max(2×10⁶, 500 L) sweeps (at
+  `L=8192`, one pinned trial took 8.3×10⁵ to converge). A trial still
+  moving at the cap counts as depinned, so the saved critical
+  configuration is always a confirmed fixed point (a capped trial
+  counted as pinned was seen to escape later, at `L=8192`). The
+  original cap (1e8 sweeps) was, in practice, an unbounded wait.
 
 An earlier attempt at warm starts was dropped because, on an `L=32`
 sample, it found a different `h_d` than the flat restart. With the

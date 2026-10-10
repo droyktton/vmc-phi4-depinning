@@ -41,16 +41,23 @@
 // (relative height); relaxation stops early as soon as it does
 #define ESCAPE_LANE 0.95
 
-// relaxes the current state at field h; true if the interface escaped
+// relaxation is checked every CHOP sweeps
+#define CHOP 1000
+
+// relaxes the current state at field h; true if the interface escaped,
+// or (with the default, local stopping criterion) if it was still moving
+// after MAXSWEEPS sweeps (see misistema.h)
 bool depins(System *sys, float h, const char *stage)
 {
 	std::chrono::steady_clock::time_point t0=std::chrono::steady_clock::now();
 	double work0=sys->tile_work();
 	sys->set_external_field(h);
-	int sweeps=sys->find_next_metastable(100,ESCAPE_LANE);
+	int sweeps=sys->find_next_metastable(CHOP,ESCAPE_LANE);
 	bool escaped=sys->magnetization_lane(ESCAPE_LANE)>0;
+	bool capped=!escaped && !sys->converged();
+	if(capped && sys->get_tolres()>0) escaped=true;
 	double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
-	std::cout << stage << " h=" << h << (escaped ? " depinned" : " pinned")
+	std::cout << stage << " h=" << h << (escaped ? " depinned" : " pinned") << (capped ? " (still moving at the cap)" : "")
 		<< " sweeps=" << sweeps << " time=" << seconds << "s";
 	if(sys->get_use_tiles()) std::cout << " tile_work=" << sys->tile_work()-work0 << " sweeps";
 	std::cout << std::endl;

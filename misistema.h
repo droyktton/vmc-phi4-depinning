@@ -29,6 +29,7 @@
 #include <thrust/swap.h>
 #include <thrust/iterator/zip_iterator.h>
 #include <cassert>
+#include <algorithm>
 #include <iostream>
 #include <cmath>
 #include <fstream>
@@ -53,20 +54,22 @@ typedef float REAL;
 #define TOLVEL 0.0001	// convergence cutoff epsilon on the mean DW velocity
 #endif
 
-// safety cap on find_next_metastable's relaxation loop, in units of
-// "chop"-sweep blocks (e.g. with the usual chop=100, this is
-// MAXITERATIONS*100 sweeps): if the relaxation hasn't converged by
-// then, the trial is classified by the escape lane alone (in practice,
-// pinned: it only happens extremely close to h_d). The original
-// value (1000000, i.e. 1e8 sweeps) is, in practice, an unbounded wait:
-// at observed throughput this is on the order of tens of hours, far
-// beyond what any genuinely-converging (even critically slow) trial
-// has been seen to need -- empirically, convergence completes within
-// a few thousand sweeps (a few tens of iterations) even in slow,
-// near-critical cases. 5000 iterations (5e5 sweeps) keeps a >60x
-// margin above that while turning a genuinely non-converging trial
-// from an effectively unbounded wait into a bounded few-minutes one.
-#define MAXITERATIONS	5000
+// safety cap on find_next_metastable's relaxation, in sweeps:
+// max(MAXSWEEPS, MAXSWEEPS_PER_L*L). A relaxation that hasn't converged
+// by then is reported as such (converged()==false), and the bisection
+// counts it as depinned. Near h_d relaxations get very long at large L:
+// at L=8192 a pinned trial took 8.3e5 sweeps to converge, and a trial
+// that hit a 5e5 cap (then counted as pinned) escaped 2.3e5 sweeps
+// later. Counting a capped trial as depinned keeps every saved critical
+// configuration a confirmed fixed point; h_d can then only come out
+// low, and only if a pinned relaxation outlasts the cap. (The original
+// cap, 1e8 sweeps, was in practice an unbounded wait.)
+#ifndef MAXSWEEPS
+#define MAXSWEEPS 2000000
+#endif
+#ifndef MAXSWEEPS_PER_L
+#define MAXSWEEPS_PER_L 500
+#endif
 
 // convergence cutoff on the largest residual max_i |dphi_i/dt| (local
 // criterion, see find_next_metastable); 0 selects the legacy TOLVEL
@@ -385,6 +388,8 @@ class System{
 		float external_field;
 		int total_time;
 		float tolres;
+		bool last_converged; // did the last find_next_metastable converge?
+		long max_sweeps;     // its cap
 
 	public:
 		unsigned long disorder_seed;
@@ -419,6 +424,8 @@ class System{
 			external_field=0.0;
 			total_time=0;
 			tolres=TOLRES;
+			last_converged=true;
+			max_sweeps=std::max((long)MAXSWEEPS,(long)MAXSWEEPS_PER_L*L);
 			disorder_seed=_disorder_seed;
 
 			reset_uniform();
@@ -558,11 +565,13 @@ class System{
 		// ~l*v/L to the mean, so it can stop on a still-moving wall.)
 		// Once max|dphi/dt| < tolres, it is confirmed by checking that no
 		// site moves more than CONFIRM_DPHI over the next CONFIRM_SWEEPS
-		// sweeps, which a wall in the saddle-node bottleneck still does. If escape_lane>0, also stops as soon as the interface
-		// has swept past row escape_lane*L (magnetization_lane>0): for
-		// bisection that already decides "depinned", so there's no need
-		// to relax the rest of the way (the wall ends up stuck at y=L).
-		// Returns the number of sweeps done.
+		// sweeps, which a wall in the saddle-node bottleneck still does.
+		// If escape_lane>0, also stops as soon as the interface has swept
+		// past row escape_lane*L (magnetization_lane>0): for bisection
+		// that already decides "depinned", so there's no need to relax
+		// the rest of the way (the wall ends up stuck at y=L). Gives up
+		// after max_sweeps sweeps. Returns the number of sweeps done;
+		// converged() tells whether it stopped at a fixed point.
 		int find_next_metastable(int chop, float escape_lane=-1)
 		{
 			bool moving;
@@ -588,10 +597,12 @@ class System{
 				}
 				else moving = fabs(velocity_phi())>TOLVEL;
 				if(escape_lane>0 && magnetization_lane(escape_lane)>0) break;
-			}while(moving && iterations<MAXITERATIONS);
+			}while(moving && (long)iterations*chop<max_sweeps);
 
+			last_converged=!moving;
 			return iterations*chop;
 		}
+		bool converged(){ return last_converged; }
 
 		float magnetization(){ return thrust::reduce(d_phi,d_phi+L2); }
 

@@ -132,11 +132,20 @@ v = \frac{1}{L}\sum_{i=1}^{L^2}\partial_t\phi_i
   point. The criterion is therefore confirmed: once it holds, no site may
   move more than `CONFIRM_DPHI` $=10^{-4}$ over the next
   `CONFIRM_SWEEPS` $=1000$ sweeps (a mean speed 100 times below
-  `TOLRES`); otherwise the wait starts again. A cap of `MAXITERATIONS`
-  $= 5000$ blocks ($5\times10^5$ sweeps) remains; a trial that reaches
-  it without crossing the escape row (below) counts as pinned. That only
-  happens extremely close to $h_d$, where the slowest mode's relaxation
-  time diverges.
+  `TOLRES`); otherwise the wait starts again. Checks are made every
+  `chop` = 1000 sweeps.
+- **Cap.** After $\max(2\times10^6,\,500L)$ sweeps (`MAXSWEEPS`,
+  `MAXSWEEPS_PER_L`) the relaxation gives up, and a trial still moving
+  then counts as *depinned*. Near $h_d$ relaxations get very long at
+  large $L$: at $L=8192$ a pinned trial took $8.3\times10^5$ sweeps to
+  converge, and a trial that hit the former cap ($5\times10^5$ sweeps,
+  then counted as pinned) escaped $2.3\times10^5$ sweeps later, which
+  had both raised $h_d$ and saved a moving wall as the critical
+  configuration. Counting a capped trial as depinned keeps every
+  critical configuration a confirmed fixed point, at the cost of an
+  $h_d$ that can only come out low, and only if a pinned relaxation
+  outlasts the cap. The solver prints "still moving at the cap" when
+  that happens.
 
 ### 2.3 Depinning field by bisection
 
