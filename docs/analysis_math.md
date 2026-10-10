@@ -476,10 +476,10 @@ saturated, and to see a plateau $D$ decades wide,
 \log_{10}\frac{l_o}{L_c} \gtrsim 0.95\,(w_1 + w_2) + D .
 ```
 
-From the fit, $l_o/L_c = (b/a)\,\Delta^{-(\alpha - x_c)} \approx 4\,\Delta^{-1.43}$.
-That is ≈ 4 at $\Delta=1$ and ≈ 15 at $\Delta=0.4$, whereas merely
-reaching $\zeta_q$ needs $\gtrsim 25$, and a one-decade plateau
-$\gtrsim 250$ ($\Delta\approx0.055$).
+From the fit, $l_o/L_c = (b/a)\,\Delta^{-(\alpha - x_c)} \approx 5\,\Delta^{-1.43}$.
+That is ≈ 5 at $\Delta=1$ and ≈ 19 at $\Delta=0.4$, whereas merely
+reaching $\zeta_q$ needs $\gtrsim 30$ ($\Delta\approx0.28$), and a
+one-decade plateau $\gtrsim 300$ ($\Delta\approx0.057$).
 
 ### 6.4 Fit
 
@@ -520,23 +520,35 @@ relative):
 
 | form | all free | $x_c = 2/3$ | $x_c = 2/3$, $\alpha = 2.1$ | $\chi^2/\text{dof}$ |
 |---|---|---|---|---|
-| logistic | 1.18 ± 0.08 | 1.15 ± 0.04 | 1.203 ± 0.014 | 0.67–0.69 |
-| erf | 1.16 ± 0.08 | 1.15 ± 0.04 | 1.209 ± 0.014 | 0.67–0.69 |
-| asym | 1.14 ± 0.09 | 1.14 ± 0.08 | 1.214 ± 0.018 | 0.66 |
-| sum | 1.12 ± 0.01 | 1.07 ± 0.01 | 1.144 ± 0.015 | 0.80–1.02 |
+| logistic | 1.30 ± 0.06 | 1.20 ± 0.03 | 1.231 ± 0.011 | 0.73–0.79 |
+| erf | 1.27 ± 0.05 | 1.21 ± 0.03 | 1.235 ± 0.011 | 0.74–0.78 |
+| asym | 1.29 ± 0.06 | 1.25 ± 0.04 | 1.243 ± 0.012 | 0.72 |
+| sum | 1.11 ± 0.02 | 1.08 ± 0.01 | 1.170 ± 0.013 | 0.97–1.25 |
+
+With $\zeta_L$ free as well it fits to 1.45–1.47, and $\zeta_q$ becomes
+1.24–1.25 (± 0.01) with $x_c$ (and $\alpha$) fixed, and 1.30–1.32
+(± 0.06) with everything free.
 
 - **The free-width shapes agree.** At fixed variant, logistic, erf and
-  asym differ by $\lesssim0.04$ in $\zeta_q$, with the same $\chi^2$.
+  asym differ by $\lesssim0.05$ in $\zeta_q$, with the same $\chi^2$.
   The step shape is not the main systematic.
-- **Freeing $\alpha$ is.** With $\alpha$ free the fits push it to ≈ 3
-  ($\pm1$), above the $\approx2.1$ of the multivalued fraction, and
-  $\zeta_q$ drops to 1.14–1.18 with errors ≈ 0.04–0.09.
+- **What is held fixed is.** With $x_c$ and $\alpha$ fixed $\zeta_q$ =
+  1.23–1.24. Freeing $x_c$ moves it to 1.27–1.30, with $x_c\to0$–0.3,
+  far from the Larkin 2/3; freeing only $\alpha$, to 1.20–1.25, with
+  $\alpha$ = 2.0–2.7 ± 0.7–0.9, compatible with 2.1.
 - **`sum` is disfavoured.** It has a higher $\chi^2$, and to follow the
   data it pushes parameters to unphysical values: $\alpha$ at its bound
-  (6), $x_c\to0$, and $L_c > l_o$. The data need crossovers sharper than
-  independent additive contributions give.
-- **No shape gives $\zeta_q = 1.25$.** With free width, $\zeta_q$ ranges
-  from 1.14 to 1.21 over shapes and variants.
+  (6) and $x_c\to0$. The data need crossovers sharper than independent
+  additive contributions give.
+- **$\zeta_q = 1.25$ is within reach.** With free width, $\zeta_q$ ranges
+  from 1.20 to 1.30 over shapes and variants. The best-constrained fits
+  (fixed $x_c$, $\alpha$) sit 1–2σ below 1.25, and on it with free
+  $\zeta_L$.
+
+These numbers are from the current solver (`data/sweep_v2`). With the
+legacy critical configurations (§8) the same fits gave $\zeta_q$ ≈ 0.03
+lower (1.203–1.214 with $x_c$, $\alpha$ fixed; 1.14–1.21 overall): the
+unrelaxed walls biased it down.
 
 ## 7. Larkin scaling
 
@@ -580,32 +592,31 @@ $l_o$.
 
 ## 8. Results ($L=1024$ and $2048$; $\Delta=0.4$–$1.0$; 30 samples)
 
-> **Caveat.** These results come from the legacy solver, whose stopping
-> criterion (§2.2) left 13–43 % of the critical configurations still
-> moving. The $h_d$ agree with the current solver to within `tol`, but
-> the configurations, and hence everything from $l_o$ on, have to be
-> recomputed.
+From `data/sweep_v2` (current solver, §2.2–2.3). The legacy sweep
+(`data/sweep`) left 13–43 % of the critical configurations still moving:
+relaxing them at the same $h$ shifted the wall by up to ≈ 360 rows. Its
+$h_d$, $l_o$, $\alpha$ and $x_c$ agree with these within errors; its
+$\zeta_q$ was ≈ 0.03 lower.
 
 | quantity | result |
 |---|---|
-| $h_d$ | $\propto\Delta^{1.343\pm0.007}$ ($L=1024$), $\Delta^{1.342\pm0.005}$ ($L=2048$); values agree between $L$ to ≲ 0.8 % |
-| $l_o$ from $f_{\rm mv}$, chord ($L=2048$) | 513, 274, 237, 136, 106 for $\Delta$ = 0.5, 0.6, 0.7, 0.85, 1.0; independent of $L$ for $\Delta\ge0.7$ |
-| $\alpha$ ($L=2048$, $l_o\le L/4$) | $f_{\rm mv}$: 1.98 ± 0.15 (chord), 2.20 ± 0.23 (principal axis); collapses: 2.06 ± 0.12, 2.23 ± 0.14 |
-| Larkin collapse | $x_c = 0.65\pm0.06$ ($L=2048$), $0.83\pm0.09$ ($L=1024$); compatible with 2/3 |
-| two-crossover fit | free $\zeta_L$: 1.47–1.51; $\zeta_q = 1.203\pm0.014$ with $x_c$, $\alpha$ fixed; 1.14–1.21 over step shapes and variants (§6.5) |
-| $l_o$ from $\zeta_W$ or global $S$ | unreliable ($\alpha$ between −2.7 and 2.0): the 1.125 threshold falls where the two crossovers overlap |
+| $h_d$ | $\propto\Delta^{1.340\pm0.007}$ ($L=1024$), $\Delta^{1.339\pm0.005}$ ($L=2048$); values agree between $L$ to ≲ 0.8 % |
+| $l_o$ from $f_{\rm mv}$, chord ($L=2048$) | 504, 280, 233, 140, 102 for $\Delta$ = 0.5, 0.6, 0.7, 0.85, 1.0; independent of $L$ for $\Delta\ge0.7$ |
+| $\alpha$ ($L=2048$, $l_o\le L/4$) | $f_{\rm mv}$: 2.25 ± 0.17 (chord), 2.04 ± 0.17 (principal axis); collapses: 2.20 ± 0.43, 2.11 ± 0.11 |
+| Larkin collapse | $x_c = 0.62\pm0.05$ ($L=2048$), $0.88\pm0.11$ ($L=1024$); compatible with 2/3 |
+| two-crossover fit | free $\zeta_L$: 1.45–1.47; $\zeta_q = 1.231\pm0.011$ with $x_c$, $\alpha$ fixed; 1.20–1.30 over step shapes and variants; 1.24–1.25 with $\zeta_L$ free (§6.5) |
+| $l_o$ from $\zeta_W$ or global $S$ | unreliable ($\alpha$ between −3.3 and 1.7): the 1.125 threshold falls where the two crossovers overlap |
 
 **Reading.**
 
 - **Larkin, confirmed.** The ~1.45 at small scales is physical: it
   doesn't appear on synthetic $\zeta = 1.25$ profiles, it scales with
-  $\Delta^{-2/3}$, and the fit with free $\zeta_L$ gives 1.5.
-- **$\zeta_q$, below 1.25 but not conclusive.** The Larkin collapse
-  keeps working below 1.25, down to ≈ 1.2. Every crossover shape that
-  fits gives $\zeta_q$ = 1.14–1.21, never 1.25, and the shape changes it
-  by $\lesssim0.04$. The largest uncertainty is the degeneracy with
-  $\alpha$ (free $\alpha\approx3$ against 2.1 from $f_{\rm mv}$), and
-  all of it rests on extrapolating through a window where the plateau is
-  never reached.
-- **The qEW window is too narrow.** With $l_o/L_c\approx4$–15 it can't be
-  resolved; per §6.3, it would take a much smaller $\Delta$.
+  $\Delta^{-2/3}$, and the fit with free $\zeta_L$ gives 1.45–1.47.
+- **$\zeta_q$, compatible with 1.25.** The best-constrained fits give
+  1.23–1.24 ± 0.01, and 1.24–1.25 when $\zeta_L$ is also free. The step
+  shape changes it by $\lesssim0.05$. What remains open is how much it
+  depends on which of $x_c$ and $\alpha$ are fixed. All of it also rests
+  on extrapolating through a window where the plateau is never reached.
+- **The qEW window is too narrow.** With $l_o/L_c\approx5$–19 it can't be
+  resolved. Per §6.3, merely reaching $\zeta_q$ needs $\Delta\lesssim0.3$,
+  and a plateau needs a much smaller $\Delta$.
