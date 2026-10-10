@@ -12,6 +12,10 @@
 #   DELTAS="0.4 0.5 0.6 0.7 0.85 1.0" LS="1024 2048" NSAMPLES=30 \
 #       sbatch --array=0-11 scripts/slurm_sweep.sh
 #
+# To split one (L, Delta) over several GPUs, submit one job per seed range
+# with SEED_START and NSAMPLES (seeds SEED_START..SEED_START+NSAMPLES-1);
+# they append to the same hd_summary.csv.
+#
 # Memory: the solver keeps ~4 copies of the L x L field on the GPU
 # (~4.5 GB at L=16384, plus ~3 GB transiently when saving), so for
 # L >= 8192 keep away from GPUs shared with other processes (e.g.
@@ -27,6 +31,7 @@ set -euo pipefail
 DELTAS=${DELTAS:-"0.4 0.5 0.6 0.7 0.85 1.0"}
 LS=${LS:-"1024 2048"}
 NSAMPLES=${NSAMPLES:-30}
+SEED_START=${SEED_START:-1}
 TOL=${TOL:-1e-4}
 OUTROOT=${OUTROOT:-data/sweep}
 
@@ -44,5 +49,5 @@ HLOW=${HLOW:-$(python3 -c "print(0.85*$HEST)")}
 HHIGH=${HHIGH:-$(python3 -c "print(1.15*$HEST)")}
 echo "=== $(hostname) GPU=${CUDA_VISIBLE_DEVICES:-?} Delta=$D L=$L h in [$HLOW, $HHIGH] ==="
 python3 -u scripts/run_batch.py --binary "./phi4vmc_D$D" --L "$L" \
-    --h-low "$HLOW" --h-high "$HHIGH" --tol "$TOL" --nsamples "$NSAMPLES" \
+    --h-low "$HLOW" --h-high "$HHIGH" --tol "$TOL" --nsamples "$NSAMPLES" --seed-start "$SEED_START" \
     --dump-field --outdir "$OUTROOT/L${L}_D${D}"
