@@ -82,10 +82,25 @@ dynamics.
 ### 2.2 Sweeps and convergence
 
 - **Checkerboard.** All sites with $x+y$ even are updated in parallel,
-  then the odd ones (`vmcop`, two colours per sweep). Since a site's
-  four neighbours are all of the other colour, each half-update is
-  exact.
-- **Residual velocity.** Every `chop` = 100 sweeps the code computes
+  then the odd ones (two colours per sweep). Since a site's four
+  neighbours are all of the other colour, each half-update is exact.
+- **Active tiles.** The move is idempotent: with the same neighbours it
+  returns the same value. A site therefore only needs updating if a
+  neighbour changed in the previous (other-colour) half-sweep. The
+  lattice is split into $32\times32$ tiles, and a half-sweep only
+  updates the tiles where, in the previous half-sweep, some site of the
+  tile or of its 4 neighbouring tiles changed (`vmc_tiles_kernel`,
+  `spread_activity`). Skipping the rest is exact: with this rule alone
+  the result is bit-for-bit that of updating every site (checked). In
+  float arithmetic, though, converged sites keep flickering in the last
+  bit, so no tile would ever go quiet. A change $|\delta\phi| \le$
+  `TILE_EPS` $=10^{-6}$ is therefore applied but does not keep the tile
+  active. It leaves residuals $\sim c\,$`TILE_EPS` on the neighbours,
+  well below the stopping cutoff, and each block of `chop` sweeps
+  starts with one full sweep. Near $h_d$ the wall moves by local
+  avalanches, and the work drops to a few % of the full sweeps.
+- **Residual velocity.** The legacy criterion (`--tolres 0`) computes,
+  every `chop` = 100 sweeps,
 
 ```math
 v = \frac{1}{L}\sum_{i=1}^{L^2}\partial_t\phi_i
@@ -96,29 +111,79 @@ v = \frac{1}{L}\sum_{i=1}^{L^2}\partial_t\phi_i
   velocity $\bar v_{\rm wall}$ gives
   $\sum_i\partial_t\phi_i\approx 2L\,\bar v_{\rm wall}$, so
   $v\approx 2\bar v_{\rm wall}$ whatever the size.
-- **Stopping.** Relaxation stops when $|v| <$ `TOLVEL` $= 10^{-4}$ (a
-  metastable state), or after `MAXITERATIONS` $= 5000$ blocks
-  ($5\times10^5$ sweeps).
+  and stops when $|v| <$ `TOLVEL` $= 10^{-4}$.
+- **Why that is not enough.** $v$ is a mean over the wall. A local
+  avalanche of size $l$ moving at speed $v_a$ only contributes
+  $\sim l\,v_a/L$, so at large $L$ the relaxation can stop on a wall
+  that is still moving. Relaxing the saved legacy critical
+  configurations further, at the same $h$, showed that 13–43 % of them
+  (by set, $L=1024$–$2048$, $\Delta=0.4$, $1.0$) were not metastable:
+  the wall moved on by up to hundreds of rows, and 3 of 120 depinned.
+- **Stopping (default).** A local criterion: the largest residual
+
+```math
+\max_i |\partial_t\phi_i| < \texttt{TOLRES} = 10^{-5}
+```
+
+  (`max_residual`), which vanishes only at a fixed point. Just above
+  $h_d$, however, the dynamics has the bottleneck of a saddle-node
+  bifurcation: the wall lingers almost still for many sweeps before
+  escaping, and an instantaneous residual can't tell that from a fixed
+  point. The criterion is therefore confirmed: once it holds, no site may
+  move more than `CONFIRM_DPHI` $=10^{-4}$ over the next
+  `CONFIRM_SWEEPS` $=1000$ sweeps (a mean speed 100 times below
+  `TOLRES`); otherwise the wait starts again. A cap of `MAXITERATIONS`
+  $= 5000$ blocks ($5\times10^5$ sweeps) remains; a trial that reaches
+  it without crossing the escape row (below) counts as pinned. That only
+  happens extremely close to $h_d$, where the slowest mode's relaxation
+  time diverges.
 
 ### 2.3 Depinning field by bisection
 
 For each trial $h$ (`find_depinning_field`):
 
-1. **Flat initial condition:** $\phi = +1$ for $y < 0.2L$ and $\phi=-1$
-   for $y \ge 0.2L$.
+1. **Initial condition:** the last pinned state found (warm start,
+   below). The first trial starts from the flat wall, $\phi = +1$ for
+   $y < 0.2L$ and $\phi=-1$ for $y \ge 0.2L$.
 2. **Relaxation** with the rule above, with an early exit: if the wall
    crosses the row $y_e = 0.95L$, i.e. if $\max_x \phi(x, y_e) > 0$
    (`magnetization_lane`, `ESCAPE_LANE`), it stops there.
 3. **Classification:** the trial is *depinned* if
    $\max_x\phi(x,y_e) > 0$, and *pinned* otherwise.
 
-Bisection on $[a,b]$ replaces $a$ (pinned) or $b$ (depinned) by the
-midpoint until $b-a \le$ `tol` $= 10^{-4}$. It then steps back,
-$a \leftarrow a - \text{tol}$, until the trial is pinned. This defines
+First the ends are checked: $h_{\rm low}$ must be pinned (if not, it is
+divided by 1.5) and $h_{\rm high}$ depinned (if not, it becomes the new
+$h_{\rm low}$ and $h_{\rm high}$ is multiplied by 1.5), so a bracket
+that misses a sample's $h_d$ costs a few trials, not a wrong result.
+Bisection on $[a,b]$ then replaces $a$ (pinned) or $b$ (depinned) by the
+midpoint until $b-a \le$ `tol` $= 10^{-4}$. This defines
 
 ```math
 h_d \equiv a, \qquad \text{critical configuration} = \text{metastable state at } h_d.
 ```
+
+(The legacy code then stepped back, $a \leftarrow a-\text{tol}$, until
+the trial was pinned again, and reported that. Its $h_d$ are thus one
+`tol` lower.)
+
+**Warm starts.** Let $M(h)$ be the state reached from the flat wall at
+field $h$. For $a < h$, the pinned state $M(a)$ lies between the flat
+wall and $M(h)$, so by no-passing (below) the dynamics started from
+$M(a)$ also ends at $M(h)$, or escapes if and only if the flat start
+escapes. Each trial therefore starts from the last pinned state, and
+after an escape that state is restored (`save_state`,
+`restore_state`). The wall only has to move from $M(a)$ to $M(h)$
+instead of all the way from $y=0.2L$, and the final step-back is no
+longer needed: the saved state at $a$ *is* the critical configuration.
+The ordering argument is not strict in the bulk, where the flat
+start's $\pm1$ differs from the relaxed $\pm\sqrt{1+r}$ either way;
+those sites relax in a few sweeps, so it only matters near the wall.
+The check is therefore empirical: `--verify-cold` relaxes once more
+from the flat wall at $h_d$ and compares. With the default stopping criterion the two agree in every
+sample tested (60, $L=512$–$2048$): both pinned, $\max|\delta\phi|
+\le 5\times10^{-4}$. With the legacy criterion they did not: the warm
+start then stops on slow local avalanches even more easily, and
+reported $h_d$ up to 5 `tol` too high.
 
 **Why restarting from the flat wall is valid.** By Middleton's
 no-passing theorems the dynamics preserves order: if $\phi \le \phi'$
@@ -136,8 +201,16 @@ that row anyway. Pinned trials never cross $y_e$, so they relax exactly
 as before and the saved critical configuration is unchanged. Checked on
 13 seeds: same $h_d$, and at $L=1024$ the total time dropped by 32 %.
 
-**Initial bracket.** $[0,\, 3h_{\rm est}]$, with
-$h_{\rm est} = 0.008\,(\Delta/0.2)^{4/3}$ (Larkin scaling, §7).
+**Initial bracket.** `slurm_sweep.sh` uses $[0.85,\,1.15]\,h_{\rm est}$
+with $h_{\rm est} = 0.0195\,(\Delta/0.4)^{1.34}$, the fit of the
+$L=1024$–$2048$ sweep (§8); `sweep_disorder.sh` keeps $[0,\,3h_{\rm est}]$
+with $h_{\rm est} = 0.008\,(\Delta/0.2)^{4/3}$ (Larkin scaling, §7).
+
+**Cost.** Per sample, on the same GPU, legacy vs. default: $L=2048$,
+$\Delta=0.4$: 254 s → 33 s (×8); $\Delta=1.0$: 250 s → 13 s (×19);
+$L=4096$, $\Delta=1.0$: 1361 s → 62 s (×22). The gain grows with $L$:
+the warm start saves the wall's travel, $\propto L$, and the tiles
+skip the quiet part of the lattice, a growing fraction.
 
 ## 3. The wall as a curve
 
@@ -497,6 +570,12 @@ Above $L_c$ the qEW regime starts ($\zeta\approx1.25$ in $d=1$), up to
 $l_o$.
 
 ## 8. Results ($L=1024$ and $2048$; $\Delta=0.4$–$1.0$; 30 samples)
+
+> **Caveat.** These results come from the legacy solver, whose stopping
+> criterion (§2.2) left 13–43 % of the critical configurations still
+> moving. The $h_d$ agree with the current solver to within `tol`, but
+> the configurations, and hence everything from $l_o$ on, have to be
+> recomputed.
 
 | quantity | result |
 |---|---|

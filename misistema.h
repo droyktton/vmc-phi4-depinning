@@ -26,6 +26,8 @@
 #include <thrust/pair.h>
 #include <thrust/count.h>
 #include <thrust/execution_policy.h>
+#include <thrust/swap.h>
+#include <thrust/iterator/zip_iterator.h>
 #include <cassert>
 #include <iostream>
 #include <cmath>
@@ -53,8 +55,9 @@ typedef float REAL;
 
 // safety cap on find_next_metastable's relaxation loop, in units of
 // "chop"-sweep blocks (e.g. with the usual chop=100, this is
-// MAXITERATIONS*100 sweeps): if the mean DW velocity hasn't reached
-// TOLVEL by then, the field is treated as depinning. The original
+// MAXITERATIONS*100 sweeps): if the relaxation hasn't converged by
+// then, the trial is classified by the escape lane alone (in practice,
+// pinned: it only happens extremely close to h_d). The original
 // value (1000000, i.e. 1e8 sweeps) is, in practice, an unbounded wait:
 // at observed throughput this is on the order of tens of hours, far
 // beyond what any genuinely-converging (even critically slow) trial
@@ -64,6 +67,22 @@ typedef float REAL;
 // margin above that while turning a genuinely non-converging trial
 // from an effectively unbounded wait into a bounded few-minutes one.
 #define MAXITERATIONS	5000
+
+// convergence cutoff on the largest residual max_i |dphi_i/dt| (local
+// criterion, see find_next_metastable); 0 selects the legacy TOLVEL
+// criterion on the mean DW velocity
+#ifndef TOLRES
+#define TOLRES 1e-5
+#endif
+// ... and, to tell a fixed point from the bottleneck of the saddle-node
+// just above h_d (where the wall lingers almost still before escaping),
+// no site may move more than CONFIRM_DPHI over CONFIRM_SWEEPS sweeps
+#ifndef CONFIRM_SWEEPS
+#define CONFIRM_SWEEPS 1000
+#endif
+#ifndef CONFIRM_DPHI
+#define CONFIRM_DPHI 1e-4
+#endif
 
 /* counter-based random numbers, used both for the quenched disorder
    r(x,y) and to give every lattice site an independent, reproducible
@@ -154,6 +173,39 @@ struct velocityop
 	}
 };
 
+// |dphi_ij/dt|
+struct abs_velocityop
+{
+	velocityop v;
+	abs_velocityop(velocityop _v):v(_v){};
+	__device__
+	float operator()(int i){ return fabsf(v(i)); }
+};
+
+// new value of a site with current value phi_center, neighbor sum
+// sum_neighbors and disorder r: the root of the steady-state cubic
+// closest to phi_center. Idempotent: with the same neighbors, it returns
+// phi_center again if phi_center already is that root.
+__device__
+float vmc_site_update(float phi_center, float sum_neighbors, float r, float external_field)
+{
+	float r_center = R0*(1.0+r);
+
+	/* Vieta form: phi^3 + p*phi - q == 0, derived from
+	   0 = c*Laplacian(phi) + eps0*[(1+r)*phi - phi^3] + h
+	   -> p = 4*c/eps0 - r_center ; q = (c*sum_neighbors + h)/eps0 */
+	float p = 4.0*CEL/EPSILON0 - r_center;
+	float q = (CEL*sum_neighbors + external_field)/EPSILON0;
+
+	float x1,x2,x3;
+	int num_roots = vieta_solver(p, q, x1, x2, x3);
+
+	if(num_roots==1) return x1;
+	// pick the root closest to the current value
+	if(phi_center>x3) return x1;
+	return x2;
+}
+
 // elementary VMC move: sets phi_ij to the root of the steady-state cubic
 // closest to its current value. Sites are dispatched in a checkerboard
 // (2-coloring) pattern so that a whole color can be updated in parallel:
@@ -193,26 +245,70 @@ struct vmcop
 		if(y==0) phi_down*=-1;
 		if(y==L-1) phi_up*=-1;
 
-		float r = site_disorder(center, disorder_seed);
-		float r_center = R0*(1.0+r);
-
-		/* Vieta form: phi^3 + p*phi - q == 0, derived from
-		   0 = c*Laplacian(phi) + eps0*[(1+r)*phi - phi^3] + h
-		   -> p = 4*c/eps0 - r_center ; q = (c*sum_neighbors + h)/eps0 */
-		float p = 4.0*CEL/EPSILON0 - r_center;
-		float q = (CEL*(phi_up+phi_down+phi_right+phi_left) + external_field)/EPSILON0;
-
-		float x1,x2,x3;
-		int num_roots = vieta_solver(p, q, x1, x2, x3);
-
-		if(num_roots==1) phi[center]=x1;
-		else{
-			// pick the root closest to the current value
-			if(phi_center>x3) phi[center]=x1;
-			else phi[center]=x2;
-		}
+		phi[center]=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
+			site_disorder(center, disorder_seed),external_field);
 	}
 };
+
+// Active tiles: the same checkerboard update, by TILE x TILE tiles, one
+// thread block per tile, skipping inactive tiles. Since the update is
+// idempotent, a site needs updating only if one of its neighbors changed
+// in the previous (other-color) pass; a tile is active for a pass iff
+// some site in it or in one of its 4 neighbor tiles changed in the
+// previous pass. With tile_eps=0, skipping the others is exact (the
+// result is bit-for-bit that of updating every site), but in float
+// converged sites keep flickering in the last bit, so no tile ever goes
+// quiet. A change |dphi|<=tile_eps is therefore applied but doesn't
+// count as one; it leaves residuals ~ c*tile_eps on the neighbors, well
+// below tolres, and every dynamics() call starts with a full sweep.
+// work counts the active tiles' updates.
+#define TILE 32
+#ifndef TILE_EPS
+#define TILE_EPS 1e-6
+#endif
+__global__
+void vmc_tiles_kernel(float *phi, int L, float external_field, int color_offset,
+	unsigned long disorder_seed, const unsigned char *active, unsigned char *changed,
+	unsigned long long *work, float tile_eps)
+{
+	int T=L/TILE;
+	int tile=blockIdx.x;
+	if(!active[tile]) return;
+	if(threadIdx.x==0) atomicAdd(work,1ULL);
+
+	int y=(tile/T)*TILE+threadIdx.x/(TILE/2);
+	int x=(tile%T)*TILE+2*(threadIdx.x%(TILE/2));
+	x+=(y+color_offset)&1; // this color: x = y+color_offset (mod 2), as in vmcop
+
+	int y_plus1=(y+1)%L, y_minus1=(y-1+L)%L;
+	int x_plus1=(x+1)%L, x_minus1=(x-1+L)%L;
+	int center=x+L*y;
+	float phi_up=phi[x+L*y_minus1], phi_down=phi[x+L*y_plus1];
+	float phi_right=phi[x_plus1+L*y], phi_left=phi[x_minus1+L*y];
+	float phi_center=phi[center];
+
+	// anti-periodic BC in y: a single domain wall spans the sample
+	if(y==0) phi_down*=-1;
+	if(y==L-1) phi_up*=-1;
+
+	float new_phi=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
+		site_disorder(center, disorder_seed),external_field);
+	if(new_phi!=phi_center){
+		phi[center]=new_phi;
+		if(fabsf(new_phi-phi_center)>tile_eps) changed[tile]=1;
+	}
+}
+
+// active[t] = some site changed in tile t or in one of its 4 neighbors
+__global__
+void spread_activity(const unsigned char *changed, unsigned char *active, int T)
+{
+	int tile=blockIdx.x*blockDim.x+threadIdx.x;
+	if(tile>=T*T) return;
+	int tx=tile%T, ty=tile/T;
+	active[tile]=changed[tile] | changed[(tx+1)%T+T*ty] | changed[(tx-1+T)%T+T*ty]
+		| changed[tx+T*((ty+1)%T)] | changed[tx+T*((ty-1+T)%T)];
+}
 
 __host__ __device__ int index_center(int x,int y,int L){ return x+L*y; }
 __host__ __device__ int index_up(int x,int y,int L){ return x+L*((y-1+L)%L); }
@@ -256,6 +352,13 @@ struct is_wall_smooth
 	}
 };
 
+// |a_i-b_i|, reduced with max to compare two fields
+struct abs_diff
+{
+	__host__ __device__
+	float operator()(const thrust::tuple<float,float> &t){ return fabsf(thrust::get<0>(t)-thrust::get<1>(t)); }
+};
+
 struct is_positive
 {
 	__host__ __device__
@@ -265,7 +368,14 @@ struct is_positive
 class System{
 	private:
 		thrust::device_ptr<float> d_phi;
+		thrust::device_ptr<float> d_saved; // a copy of phi (save_state/restore_state)
+		thrust::device_ptr<float> d_snap;  // phi some sweeps ago (find_next_metastable)
 		thrust::device_ptr<int> d_wall_site_indices; // scratch buffer for wall-site indices
+		// active tiles (see vmc_tiles_kernel)
+		bool use_tiles;
+		float tile_eps;
+		thrust::device_vector<unsigned char> d_active, d_changed;
+		thrust::device_vector<unsigned long long> d_work;
 		int wall_first_index;
 		int wall_last_index;
 
@@ -274,6 +384,7 @@ class System{
 
 		float external_field;
 		int total_time;
+		float tolres;
 
 	public:
 		unsigned long disorder_seed;
@@ -290,13 +401,24 @@ class System{
 			L2=L*L;
 
 			d_phi = thrust::device_malloc<float>(L2);
+			d_saved = thrust::device_malloc<float>(L2);
+			d_snap = thrust::device_malloc<float>(L2);
 			phi_ptr = thrust::raw_pointer_cast(&d_phi[0]);
 			// every site can in principle be a wall site; L*10 could overflow
 			// for overhang-rich walls at strong disorder
 			d_wall_site_indices = thrust::device_malloc<int>(L2);
 
+			use_tiles = (L%TILE==0);
+			tile_eps = TILE_EPS;
+			if(use_tiles){
+				d_active.resize((L/TILE)*(L/TILE));
+				d_changed.resize((L/TILE)*(L/TILE));
+				d_work.resize(1,0);
+			}
+
 			external_field=0.0;
 			total_time=0;
+			tolres=TOLRES;
 			disorder_seed=_disorder_seed;
 
 			reset_uniform();
@@ -311,8 +433,13 @@ class System{
 			log << "TOLVEL (epsilon)= " << TOLVEL << std::endl;
 		}
 
+		void set_tolres(float t){ tolres=t; }
+		float get_tolres(){ return tolres; }
+
 		~System(){
 			thrust::device_free(d_phi);
+			thrust::device_free(d_saved);
+			thrust::device_free(d_snap);
 			thrust::device_free(d_wall_site_indices);
 		}
 
@@ -327,14 +454,42 @@ class System{
 
 		void reset_uniform(){ thrust::fill(d_phi, d_phi+L2, -1.0f); };
 
+		// keep a copy of phi / go back to it (warm starts of the bisection)
+		void save_state(){ thrust::copy(d_phi, d_phi+L2, d_saved); }
+		void restore_state(){ thrust::copy(d_saved, d_saved+L2, d_phi); }
+		void swap_state(){ thrust::swap_ranges(d_phi, d_phi+L2, d_saved); }
+
+		// max_i |phi_i - other_i|
+		float max_diff(thrust::device_ptr<float> other)
+		{
+			return thrust::transform_reduce(
+				thrust::make_zip_iterator(thrust::make_tuple(d_phi, other)),
+				thrust::make_zip_iterator(thrust::make_tuple(d_phi+L2, other+L2)),
+				abs_diff(), 0.0f, thrust::maximum<float>());
+		}
+		float max_diff_saved(){ return max_diff(d_saved); }
+
 		void set_external_field(float h){ external_field=h; }
 		float get_external_field(){ return external_field; }
 		int get_L(){ return L; }
 		int get_total_time(){ return total_time; }
 
-		// checkerboard VMC sweeps: num_sweeps full sweeps of the lattice
+		// whole-lattice sweeps instead of active tiles (for comparisons)
+		void set_use_tiles(bool t){ use_tiles = t && (L%TILE==0); }
+		bool get_use_tiles(){ return use_tiles; }
+		void set_tile_eps(float e){ tile_eps=e; }
+
+		// sweeps' worth of tile updates done so far (one sweep = 2*(L/TILE)^2)
+		double tile_work(){
+			if(!use_tiles) return 0;
+			unsigned long long w=d_work[0];
+			return double(w)/(2.0*(L/TILE)*(L/TILE));
+		}
+
+		// checkerboard VMC sweeps: num_sweeps sweeps of the lattice
 		void dynamics(int num_sweeps)
 		{
+			if(use_tiles){ dynamics_tiles(num_sweeps); return; }
 			int half_L2=L2/2;
 			for(int sweep=0;sweep<num_sweeps;sweep++)
 			{
@@ -344,6 +499,29 @@ class System{
 						thrust::make_counting_iterator(half_L2),
 						vmcop(phi_ptr,L,external_field,color_offset,disorder_seed)
 					);
+				}
+				total_time++;
+			}
+		}
+
+		// the same sweeps, by active tiles. The first sweep of every call
+		// (both colors) updates all tiles, since phi or h may have been
+		// changed in between.
+		void dynamics_tiles(int num_sweeps)
+		{
+			int T=L/TILE, ntiles=T*T;
+			unsigned char *active=thrust::raw_pointer_cast(d_active.data());
+			unsigned char *changed=thrust::raw_pointer_cast(d_changed.data());
+			unsigned long long *work=thrust::raw_pointer_cast(d_work.data());
+			cudaMemset(active,1,ntiles);
+			for(int sweep=0;sweep<num_sweeps;sweep++)
+			{
+				for(int color_offset=0;color_offset<2;color_offset++){
+					cudaMemset(changed,0,ntiles);
+					vmc_tiles_kernel<<<ntiles,TILE*TILE/2>>>(phi_ptr,L,external_field,color_offset,
+						disorder_seed,active,changed,work,tile_eps);
+					if(sweep==0 && color_offset==0) cudaMemset(active,1,ntiles);
+					else spread_activity<<<(ntiles+255)/256,256>>>(changed,active,T);
 				}
 				total_time++;
 			}
@@ -362,24 +540,57 @@ class System{
 			)/float(L);
 		}
 
-		// runs elementary chunks of "chop" VMC sweeps until the mean DW
-		// velocity drops below TOLVEL (i.e. a metastable state has been
-		// reached). If escape_lane>0, also stops as soon as the interface
+		// largest residual max_i |dphi_i/dt|: zero only at a genuine fixed
+		// point of the VMC map
+		float max_residual()
+		{
+			return thrust::transform_reduce(
+				thrust::make_counting_iterator(0),
+				thrust::make_counting_iterator(L2),
+				abs_velocityop(velocityop(phi_ptr,L,external_field,disorder_seed)),
+				0.0f, thrust::maximum<float>());
+		}
+
+		// runs elementary chunks of "chop" VMC sweeps until a metastable
+		// state has been reached: max_i |dphi_i/dt| < tolres. (With
+		// tolres=0, the legacy criterion: mean DW velocity < TOLVEL. That
+		// one is blind to a local avalanche of size l, which only adds
+		// ~l*v/L to the mean, so it can stop on a still-moving wall.)
+		// Once max|dphi/dt| < tolres, it is confirmed by checking that no
+		// site moves more than CONFIRM_DPHI over the next CONFIRM_SWEEPS
+		// sweeps, which a wall in the saddle-node bottleneck still does. If escape_lane>0, also stops as soon as the interface
 		// has swept past row escape_lane*L (magnetization_lane>0): for
 		// bisection that already decides "depinned", so there's no need
 		// to relax the rest of the way (the wall ends up stuck at y=L).
-		void find_next_metastable(int chop, float escape_lane=-1)
+		// Returns the number of sweeps done.
+		int find_next_metastable(int chop, float escape_lane=-1)
 		{
-			float vel;
+			bool moving;
 			int iterations=0;
+			int snap_iteration=-1; // iteration of the snapshot, -1: none
 			do{
 				dynamics(chop);
-				vel=velocity_phi();
 				iterations++;
+				if(tolres>0){
+					moving = max_residual()>tolres;
+					if(moving) snap_iteration=-1;
+					else if(snap_iteration<0){
+						thrust::copy(d_phi, d_phi+L2, d_snap);
+						snap_iteration=iterations;
+						moving=true;
+					}
+					else if((iterations-snap_iteration)*chop<CONFIRM_SWEEPS) moving=true;
+					else if(max_diff(d_snap)>CONFIRM_DPHI){
+						thrust::copy(d_phi, d_phi+L2, d_snap);
+						snap_iteration=iterations;
+						moving=true;
+					}
+				}
+				else moving = fabs(velocity_phi())>TOLVEL;
 				if(escape_lane>0 && magnetization_lane(escape_lane)>0) break;
-			}while(fabs(vel)>TOLVEL && iterations<MAXITERATIONS);
+			}while(moving && iterations<MAXITERATIONS);
 
-			if(iterations>10) std::cout << "\nblocked after " << iterations << " VMC iterations" << std::endl;
+			return iterations*chop;
 		}
 
 		float magnetization(){ return thrust::reduce(d_phi,d_phi+L2); }
@@ -475,6 +686,14 @@ class System{
 		{
 			thrust::host_vector<float> h_phi(d_phi,d_phi+L2);
 			fout.write(reinterpret_cast<const char*>(h_phi.data()),sizeof(float)*L2);
+		}
+
+		// reads a field written by print_field_binary
+		void read_field_binary(std::ifstream &fin)
+		{
+			thrust::host_vector<float> h_phi(L2);
+			fin.read(reinterpret_cast<char*>(h_phi.data()),sizeof(float)*L2);
+			thrust::copy(h_phi.begin(),h_phi.end(),d_phi);
 		}
 
 		void print_config(std::ofstream &fout)

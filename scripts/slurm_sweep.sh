@@ -11,11 +11,16 @@
 # Usage (from the repository root; number of tasks = #DELTAS * #LS):
 #   DELTAS="0.4 0.5 0.6 0.7 0.85 1.0" LS="1024 2048" NSAMPLES=30 \
 #       sbatch --array=0-11 scripts/slurm_sweep.sh
+#
+# Memory: the solver keeps ~4 copies of the L x L field on the GPU
+# (~4.5 GB at L=16384, plus ~3 GB transiently when saving), so for
+# L >= 8192 keep away from GPUs shared with other processes (e.g.
+# --exclude=<node>).
 #SBATCH --job-name=phi4vmc
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=4G
+#SBATCH --mem=16G
 #SBATCH --output=logs/%x_%A_%a.out
 set -euo pipefail
 
@@ -31,9 +36,13 @@ i=${SLURM_ARRAY_TASK_ID:?submit with sbatch --array}
 D=${DARR[$((i % ${#DARR[@]}))]}
 L=${LARR[$((i / ${#DARR[@]}))]}
 
-# Same bracket as sweep_disorder.sh: [0, 3*h_est], h_est = 0.008*(Delta/0.2)^(4/3)
-HHIGH=$(python3 -c "print(3*0.008*($D/0.2)**(4/3))")
-echo "=== $(hostname) GPU=${CUDA_VISIBLE_DEVICES:-?} Delta=$D L=$L h in [0, $HHIGH] ==="
+# Bracket [0.85, 1.15]*h_est around the measured h_d ~ 0.0195*(Delta/0.4)^1.34
+# (L=1024-2048 sweep; sample-to-sample spread ~2%). The solver widens it
+# by itself if it doesn't contain a sample's h_d.
+HEST=$(python3 -c "print(0.0195*($D/0.4)**1.34)")
+HLOW=${HLOW:-$(python3 -c "print(0.85*$HEST)")}
+HHIGH=${HHIGH:-$(python3 -c "print(1.15*$HEST)")}
+echo "=== $(hostname) GPU=${CUDA_VISIBLE_DEVICES:-?} Delta=$D L=$L h in [$HLOW, $HHIGH] ==="
 python3 -u scripts/run_batch.py --binary "./phi4vmc_D$D" --L "$L" \
-    --h-low 0 --h-high "$HHIGH" --tol "$TOL" --nsamples "$NSAMPLES" \
+    --h-low "$HLOW" --h-high "$HHIGH" --tol "$TOL" --nsamples "$NSAMPLES" \
     --dump-field --outdir "$OUTROOT/L${L}_D${D}"

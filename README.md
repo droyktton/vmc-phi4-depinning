@@ -28,21 +28,27 @@ An elementary move replaces `phi_ij` by the root of the cubic
 steady-state equation (`d phi_ij/dt = 0`) closest to its current value
 (`vieta_solver` in `misistema.h`, using Vieta's trigonometric formula).
 Sites are swept in a checkerboard (2-coloring) decomposition so that a
-whole color updates in parallel on the GPU (`vmcop`), since each site's
-four neighbors always belong to the other color. Sweeps repeat until the
-mean residual velocity `d phi/dt` of the steady-state equation drops
-below a cutoff `epsilon = TOLVEL` (`find_next_metastable`), signalling
-that a metastable state has been reached. (`velocity_phi()` normalizes
-the summed residual by `L`, not `L2`, so `TOLVEL` is a size-scaled
-cutoff rather than a literal per-site mean velocity.)
+whole color updates in parallel on the GPU, since each site's four
+neighbors always belong to the other color. Only the 32x32 tiles where
+something changed nearby are updated (`vmc_tiles_kernel`); near `h_d`
+that is a few % of the lattice. Sweeps repeat until a metastable state
+is reached (`find_next_metastable`): the largest residual
+`max |d phi/dt|` must drop below `TOLRES = 1e-5`, and then no site may
+move more than `1e-4` over the next 1000 sweeps (this tells a fixed
+point from the saddle-node bottleneck just above `h_d`). The legacy
+criterion, a cutoff `TOLVEL` on the *mean* residual (`--tolres 0`), is
+blind to local avalanches at large `L` and left 13-43 % of the saved
+critical configurations of the L=1024/2048 sweep still moving.
 
 `h_d` is located per sample by **bisection on h** (`find_depinning_field`
-in `main.cu`): for each trial field the interface is relaxed from a flat
-initial condition, and whether it escapes the sample (top lane flips
-sign) or stays pinned determines the next bisection interval. Restarting
-from the same flat initial condition at every trial `h` is valid because
-Middleton's no-passing theorems guarantee the pinned/depinned outcome at
-a given `h` doesn't depend on the relaxation path.
+in `main.cu`): whether the interface escapes the sample (the lane at
+0.95 L flips sign) or stays pinned determines the next bisection
+interval. Each trial starts from the last pinned state (the first from
+a flat interface), and after an escape that state is restored. By
+Middleton's no-passing theorems that gives the same outcome as
+restarting from the flat interface, and checked directly
+(`--verify-cold`) it does, in every one of 60 samples (L=512-2048).
+See [docs/analysis_math.md](docs/analysis_math.md) §2.
 
 Around `h_d`, `scan_magnetization_jumps()` additionally records the
 sequence of metastable states on a finer field grid — the
@@ -73,11 +79,13 @@ rebuilding with a different `AMPDIS`.
 ## Run
 
 ```
-./phi4vmc L h_low h_high tol seed [--with-magjumps] [--dump-field]
+./phi4vmc L h_low h_high tol seed [--with-magjumps] [--dump-field] [options]
 ```
 
-- `L`: lattice size (must be even, for the checkerboard decomposition)
-- `h_low`, `h_high`: bisection bracket (must be pinned at `h_low`, depinned at `h_high`)
+- `L`: lattice size (must be even, for the checkerboard decomposition;
+  a multiple of 32 for the active tiles)
+- `h_low`, `h_high`: bisection bracket (widened automatically if
+  `h_low` depins or `h_high` stays pinned)
 - `tol`: bisection tolerance on `h_d` (the paper uses `1e-4`)
 - `seed`: disorder-realization seed
 - `--with-magjumps`: also scan 100 fields within 5% of `h_d` for
@@ -87,6 +95,14 @@ rebuilding with a different `AMPDIS`.
   already fully determined without it.
 - `--dump-field`: also save the whole critical field `phi` (see below),
   needed for the arc-length analysis of `scripts/local_roughness.py`.
+- Checks and comparisons: `--verify-cold` (relax again from a flat
+  interface at `h_d` and compare), `--no-warm` (every trial from a flat
+  interface), `--no-tiles` (sweep the whole lattice), `--tolres x`
+  (`0`: legacy criterion), `--tile-eps x`, and `--relax-from file`
+  (relax a saved field at `h_low` and report how far it moves).
+
+Each trial prints a progress line (field, outcome, sweeps, time, and the
+work actually done in full-sweep units).
 
 Example:
 
@@ -151,17 +167,16 @@ Two things keep this bounded rather than unpredictable:
   of hours at observed throughput — which is what made `L=1024`/`2048`
   runs hang indefinitely before this was tuned down.
 
-For much larger `L` (2048+), a single sample can still take tens of
-minutes or more; there's currently no way to know how long short of
-running it. A genuinely faster search (e.g. warm-starting from the
-previous trial's configuration instead of always restarting from a
-flat interface) was investigated but not adopted: for this disordered,
-multistable system, different starting conditions can converge to
-different, equally-stable metastable states at the same field, so a
-warm-started search can find a different `h_d` than the flat-restart
-one implemented here (confirmed directly on an `L=32` sample). Which
-branch "is" h_d is a genuine protocol question, not a bug — so the
-(slower, but validated) flat-restart bisection is kept as the default.
+An earlier attempt at warm starts was dropped because, on an `L=32`
+sample, it found a different `h_d` than the flat restart. With the
+legacy (mean-residual) stopping criterion that does happen, and was
+reproduced here: a warm start stops even more easily on a slow local
+avalanche. The warm start used now only ever starts from a *pinned*
+state below the trial field, and with the local stopping criterion
+it agrees with the flat restart in every sample tested.
+
+Cost per sample, legacy vs. current, same GPU: `L=2048`: ×8
+(`Delta=0.4`) to ×19 (`Delta=1.0`); `L=4096`, `Delta=1.0`: 1361 s → 62 s.
 
 ## Analysis
 

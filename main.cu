@@ -7,13 +7,21 @@
 // approximation: pinch-off, overhangs and structure factor").
 //
 // Method: bisection on the external field h. For each trial h, the
-// interface is relaxed to a metastable state starting from a flat
-// initial condition (Middleton's theorems guarantee that whether the
-// interface eventually escapes the sample or stays pinned depends on h
-// alone, not on the relaxation path, so restarting from a flat interface
-// at every trial h is valid). Escape is detected as the top lane of the
-// lattice flipping sign, at which point that trial's relaxation is
-// stopped early. Bisection stops at |h_high-h_low|<tol, giving h_d.
+// interface is relaxed to a metastable state; escape is detected as the
+// lane at ESCAPE_LANE*L flipping sign, at which point that trial's
+// relaxation is stopped early. Bisection stops at |h_high-h_low|<tol,
+// giving h_d = h_low (the largest field found pinned).
+//
+// Warm starts: the VMC map is monotone (no-passing), so the metastable
+// state M(h) reached from a flat interface is also reached from any
+// state X with flat <= X <= M(h). The pinned state M(a) at a field a<h
+// is such a state, so each trial starts from the last pinned state
+// instead of from the flat interface: the wall only has to move from
+// M(a) to M(h), not all the way from y=0.2L. After an escape, the last
+// pinned state is restored. (flat <= M(a) only holds up to the bulk
+// sites, which relax within a few sweeps, so this is checked: at the end,
+// --verify-cold relaxes again from the flat interface at h_d and
+// compares; see docs/analysis_math.md, section 2.3.)
 //
 // Around h_d, scan_magnetization_jumps() additionally records the
 // metastable-state sequence (magnetization jumps / "avalanches") on a
@@ -26,42 +34,87 @@
 #include <fstream>
 #include <cstdio>
 #include <string>
+#include <chrono>
 #include "misistema.h"
 
 // a trial field is "depinned" once the interface sweeps past this row
 // (relative height); relaxation stops early as soon as it does
 #define ESCAPE_LANE 0.95
 
-// bisects on h in [h_low,h_high] (tolerance tol) to find the depinning
-// field h_d for the sample seeded by sys->disorder_seed. Saves the
-// critical configuration (critica_h..._seed....dat) and its
-// magnetization profile (criticamag_h..._seed....dat), and, if
-// dump_field, the full field as raw float32 (criticafield_h..._seed....bin).
-// Returns h_d.
-float find_depinning_field(float h_low, float h_high, float tol, System *sys, bool dump_field)
+// relaxes the current state at field h; true if the interface escaped
+bool depins(System *sys, float h, const char *stage)
+{
+	std::chrono::steady_clock::time_point t0=std::chrono::steady_clock::now();
+	double work0=sys->tile_work();
+	sys->set_external_field(h);
+	int sweeps=sys->find_next_metastable(100,ESCAPE_LANE);
+	bool escaped=sys->magnetization_lane(ESCAPE_LANE)>0;
+	double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
+	std::cout << stage << " h=" << h << (escaped ? " depinned" : " pinned")
+		<< " sweeps=" << sweeps << " time=" << seconds << "s";
+	if(sys->get_use_tiles()) std::cout << " tile_work=" << sys->tile_work()-work0 << " sweeps";
+	std::cout << std::endl;
+	return escaped;
+}
+
+// bisects on h to find the depinning field h_d for the sample seeded by
+// sys->disorder_seed. [h_low,h_high] needn't bracket h_d: it is widened
+// (h_low/1.5, h_high*1.5) until it does. Saves the critical
+// configuration (critica_h..._seed....dat) and its magnetization profile
+// (criticamag_h..._seed....dat), and, if dump_field, the full field as
+// raw float32 (criticafield_h..._seed....bin). Returns h_d.
+float find_depinning_field(float h_low, float h_high, float tol, System *sys, bool dump_field, bool verify_cold, bool no_warm)
 {
 	float a=h_low, b=h_high, mid;
+
+	// lower end, from a flat interface
+	sys->set_flat_interface();
+	while(depins(sys,a,"low")){
+		if(a<=0){
+			std::cerr << "ERROR: the interface depins at h=" << a << std::endl;
+			exit(1);
+		}
+		b=a;
+		a/=1.5;
+		sys->set_flat_interface();
+	}
+	sys->save_state();
+
+	// upper end, warm-started from the pinned state at a
+	if(no_warm) sys->set_flat_interface();
+	while(!depins(sys,b,"high")){
+		a=b;
+		sys->save_state();
+		b*=1.5;
+		if(no_warm) sys->set_flat_interface();
+	}
+	sys->restore_state();
+
 	int iteration=0;
-	while(b-a>tol && iteration<10000)
+	while(b-a>tol && iteration<100)
 	{
 		mid=(a+b)*0.5;
-		sys->set_external_field(mid);
-		sys->set_flat_interface();
-		sys->find_next_metastable(100,ESCAPE_LANE);
-		if(sys->magnetization_lane(ESCAPE_LANE)<0) a=mid;
-		else b=mid;
+		if(no_warm) sys->set_flat_interface();
+		if(depins(sys,mid,"bisect")){
+			b=mid;
+			sys->restore_state();
+		}
+		else{
+			a=mid;
+			sys->save_state();
+		}
 		std::cout << "[" << a << "," << b << "]" << std::endl;
 		iteration++;
 	}
+	// phi (and the saved copy) now hold the pinned state at a
 
-	// step back below a until the interface is pinned again, so we save
-	// a genuine critical (depinning) configuration
-	do{
-		a=a-tol;
-		sys->set_external_field(a);
+	if(verify_cold){
 		sys->set_flat_interface();
-		sys->find_next_metastable(100,ESCAPE_LANE);
-	}while(sys->magnetization_lane(ESCAPE_LANE)>0);
+		bool escaped=depins(sys,a,"cold");
+		std::cout << "cold-start check at h=" << a << ": " << (escaped ? "DEPINNED" : "pinned")
+			<< ", max|phi_warm-phi_cold| = " << sys->max_diff_saved() << std::endl;
+		sys->restore_state();
+	}
 
 	char filename[100];
 	int L=sys->get_L();
@@ -121,11 +174,20 @@ void scan_magnetization_jumps(float h_low, float h_high, System *sys)
 int main(int argc, char **argv)
 {
 	int L; float h_low,h_high,tol; unsigned long disorder_seed;
-	bool with_magjumps=false, dump_field=false, bad_flag=false;
+	bool with_magjumps=false, dump_field=false, verify_cold=false, bad_flag=false;
+	float tolres=-1, tile_eps=-1;
+	std::string relax_from;
+	bool no_warm=false, no_tiles=false;
 	for(int i=6;i<argc;i++){
 		std::string flag(argv[i]);
 		if(flag=="--with-magjumps") with_magjumps=true;
 		else if(flag=="--dump-field") dump_field=true;
+		else if(flag=="--verify-cold") verify_cold=true;
+		else if(flag=="--no-warm") no_warm=true;
+		else if(flag=="--no-tiles") no_tiles=true;
+		else if(flag=="--tile-eps" && i+1<argc) tile_eps=atof(argv[++i]);
+		else if(flag=="--relax-from" && i+1<argc) relax_from=argv[++i];
+		else if(flag=="--tolres" && i+1<argc) tolres=atof(argv[++i]);
 		else bad_flag=true;
 	}
 	if(argc>=6 && !bad_flag){
@@ -136,21 +198,46 @@ int main(int argc, char **argv)
 		disorder_seed=strtoul(argv[5],NULL,10);
 	}
 	else{
-		std::cout << "usage: " << argv[0] << " L h_low h_high tol seed [--with-magjumps] [--dump-field]" << std::endl;
+		std::cout << "usage: " << argv[0] << " L h_low h_high tol seed [--with-magjumps] [--dump-field] [--verify-cold]" << std::endl;
 		std::cout << "  L               lattice size (must be even)" << std::endl;
-		std::cout << "  h_low           lower bracket for the depinning field" << std::endl;
-		std::cout << "  h_high          upper bracket for the depinning field (must be pinned at h_low, depinned at h_high)" << std::endl;
+		std::cout << "  h_low           lower bracket for the depinning field (lowered if the interface depins there)" << std::endl;
+		std::cout << "  h_high          upper bracket for the depinning field (raised if the interface stays pinned there)" << std::endl;
 		std::cout << "  tol             bisection tolerance on h_d (paper uses 1e-4)" << std::endl;
 		std::cout << "  seed            disorder-realization seed" << std::endl;
 		std::cout << "  --with-magjumps also run the (comparatively expensive) magnetization-jump scan near h_d" << std::endl;
 		std::cout << "  --dump-field    also save the critical field phi as raw float32 (L*L*4 bytes)" << std::endl;
+		std::cout << "  --verify-cold   relax again from a flat interface at h_d and compare with the warm-started state" << std::endl;
+		std::cout << "  --no-warm       start every trial from a flat interface (no warm starts)" << std::endl;
+		std::cout << "  --no-tiles      sweep the whole lattice instead of the active tiles only" << std::endl;
+		std::cout << "  --tile-eps x    a change |dphi|<=x doesn't keep a tile active (default " << TILE_EPS << "; 0: exact)" << std::endl;
+		std::cout << "  --relax-from f  instead: relax the field in f (as saved by --dump-field) at h=h_low, and report" << std::endl;
+		std::cout << "                  how far it moves (checks that a saved configuration is metastable)" << std::endl;
+		std::cout << "  --tolres x      convergence cutoff on max|dphi/dt| (default " << TOLRES << "; 0: legacy mean-velocity criterion)" << std::endl;
 		std::cout << "example: " << argv[0] << " 256 0.0 0.1 0.0001 1234" << std::endl;
 		return 1;
 	}
 
 	System sys(L,disorder_seed);
+	if(tolres>=0) sys.set_tolres(tolres);
+	if(no_tiles) sys.set_use_tiles(false);
+	if(tile_eps>=0) sys.set_tile_eps(tile_eps);
 
-	float hd = find_depinning_field(h_low, h_high, tol, &sys, dump_field);
+	if(!relax_from.empty()){
+		std::ifstream fin(relax_from.c_str(),std::ios::binary);
+		if(!fin){ std::cerr << "ERROR: cannot read " << relax_from << std::endl; return 1; }
+		sys.read_field_binary(fin);
+		sys.save_state();
+		bool escaped=depins(&sys,h_low,"relax");
+		float dphi=sys.max_diff_saved();
+		sys.swap_state();
+		float positive_before=sys.magnetization();
+		sys.swap_state();
+		std::cout << "relaxed " << relax_from << " at h=" << h_low << ": " << (escaped ? "DEPINNED" : "pinned")
+			<< ", max|dphi| = " << dphi << ", d(sum phi)/L = " << (sys.magnetization()-positive_before)/L << std::endl;
+		return 0;
+	}
+
+	float hd = find_depinning_field(h_low, h_high, tol, &sys, dump_field, verify_cold, no_warm);
 	std::cout << "depinning field h_d = " << hd << std::endl;
 
 	if(with_magjumps) scan_magnetization_jumps(hd*0.95, hd, &sys);

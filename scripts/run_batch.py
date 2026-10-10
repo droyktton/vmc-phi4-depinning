@@ -24,21 +24,26 @@ from pathlib import Path
 HD_LINE = re.compile(r"depinning field h_d = ([-\d.eE+]+)")
 
 
-def run_one(binary, L, h_low, h_high, tol, seed, cwd, with_magjumps=False, dump_field=False):
+def run_one(binary, L, h_low, h_high, tol, seed, cwd, with_magjumps=False, dump_field=False, verbose=True):
     cmd = [str(binary), str(L), str(h_low), str(h_high), str(tol), str(seed)]
     if with_magjumps:
         cmd.append("--with-magjumps")
     if dump_field:
         cmd.append("--dump-field")
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"seed {seed} failed (exit {result.returncode}):\n{result.stderr}"
-        )
-    match = HD_LINE.search(result.stdout)
-    if not match:
+    # the solver's per-trial progress lines are passed through as they come
+    hd = None
+    with subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as proc:
+        for line in proc.stdout:
+            if verbose:
+                print(f"  [seed {seed}] {line}", end="", flush=True)
+            match = HD_LINE.search(line)
+            if match:
+                hd = float(match.group(1))
+    if proc.returncode != 0:
+        raise RuntimeError(f"seed {seed} failed (exit {proc.returncode})")
+    if hd is None:
         raise RuntimeError(f"seed {seed}: could not find h_d in output")
-    return float(match.group(1))
+    return hd
 
 
 def main():
