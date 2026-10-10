@@ -165,6 +165,11 @@ branch "is" h_d is a genuine protocol question, not a bug — so the
 
 ## Analysis
 
+The mathematics of the whole pipeline (model, VMC move and bisection,
+wall extraction, every roughness estimator, the l_o definitions and fits,
+the Larkin / two-crossover model) is written out in
+[docs/analisis_matematico.md](docs/analisis_matematico.md) (in Spanish).
+
 ### Depinning field statistics and structure factor (Python)
 
 `scripts/run_batch.py` runs `./phi4vmc` over many disorder seeds for a
