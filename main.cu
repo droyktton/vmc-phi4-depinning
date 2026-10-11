@@ -32,7 +32,7 @@
 // depinned. With --path P --headroom H instead, the wall starts at
 // y0 (--y0, default 32), escapes once *all* of row y0+P has flipped
 // (or, if a pinned bubble of the old phase keeps some of its sites from
-// flipping, all of row Ly-17), and Ly = y0+P+H: a pinned wall may stick out up to H above the escape
+// flipping, all of the row halfway up the headroom), and Ly = y0+P+H: a pinned wall may stick out up to H above the escape
 // row. P sets the finite-size regime (the aspect ratio P/w, w the
 // wall's width; Kolton et al., arXiv:1308.4329), H must exceed the
 // widest critical wall. The critical wall's rows are reported, with a

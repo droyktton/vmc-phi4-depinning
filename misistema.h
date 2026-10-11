@@ -87,10 +87,6 @@ typedef float REAL;
 #ifndef CONFIRM_DPHI
 #define CONFIRM_DPHI 1e-4
 #endif
-// with --path: rows below Ly-1 at which a fully flipped row also counts
-// as escaped (see escape_full); half of main.cu's WALL_MARGIN, so a
-// pinned wall reaching it has already been flagged
-#define ESCAPE_TOP_GAP 16
 
 /* counter-based random numbers, used both for the quenched disorder
    r(x,y) and to give every lattice site an independent, reproducible
@@ -417,9 +413,11 @@ class System{
 		// escape_row, into the headroom below Ly). With escape_full, a
 		// bubble of the old phase pinned behind the wall (pinch-off, l>l_o)
 		// can keep a few sites of escape_row from ever flipping while the
-		// wall runs on; so the wall has also escaped once all of row
-		// Ly-1-ESCAPE_TOP_GAP has flipped (a pinned wall can't be wholly
-		// above it: it would have crossed escape_row too)
+		// wall runs on; so the wall has also escaped once all of the row
+		// halfway between escape_row and Ly has flipped (a pinned wall
+		// can't be wholly above it: it would have crossed escape_row too;
+		// and it is far enough below Ly that a wall held by the seam
+		// there, with a rough front, still clears it)
 		int y_start, escape_row;
 		bool escape_full;
 
@@ -655,7 +653,7 @@ class System{
 		// has the interface escaped (see escape_row)?
 		bool escaped(){
 			if(!escape_full) return row_max(escape_row)>0;
-			return row_min(escape_row)>0 || row_min(Ly-1-ESCAPE_TOP_GAP)>0;
+			return row_min(escape_row)>0 || row_min((escape_row+Ly)/2)>0;
 		}
 
 		// rows spanned by the wall: (lowest row with some phi<0, highest

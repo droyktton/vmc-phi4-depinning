@@ -72,7 +72,12 @@ sample of critical walls:
 With `--path P --headroom H` the wall starts at $y_0$ (32 rows above the
 seam) and has escaped once *all* of row $y_e = y_0+P$ has flipped. Since
 the motion is monotone, it can't come back after that. $L_y = y_0+P+H$,
-so a pinned wall may stick out up to $H$ above $y_e$. If $H$ is too
+so a pinned wall may stick out up to $H$ above $y_e$. Above $l_o$ a
+bubble of the old phase can pinch off and stay pinned on row $y_e$, so
+that row never flips while the wall runs on; the wall has therefore also
+escaped once all of row $y_e + H/2$ has flipped (a pinned wall can't be
+wholly above it without having crossed $y_e$). On $L=1024$, Δ = 1, one
+seed in 30 needed it. If $H$ is too
 small, the tip reaches $L_y$ and is held by the seam. The trial then
 counts as pinned and $h_d$ comes out high: on one seed of $L=512$,
 Δ = 1, $P = 912$, it was 0.06718 with $H = 64$–256 against 0.06664 with
@@ -209,7 +214,8 @@ For each trial $h$ (`find_depinning_field`):
    has escaped (`System::escaped`). By default that means it reaches the
    row $y_e = 0.95L_y$ somewhere, $\max_x \phi(x, y_e) > 0$. With
    `--path`, it means it has crossed $y_e = y_0+P$ everywhere,
-   $\min_x \phi(x, y_e) > 0$ (see §1).
+   $\min_x \phi(x, y_e) > 0$, or row $y_e+H/2$ everywhere (past a
+   pinned bubble; see §1).
 3. **Classification:** the trial is *depinned* if it escaped, and
    *pinned* otherwise.
 

@@ -106,7 +106,8 @@ rebuilding with a different `AMPDIS`.
   escape test (some site of row 0.95 Ly flips), which censors wide
   critical walls whose strongest pinning lies just below that row.
 - `--path P --headroom H [--y0 Y]`: start at row `Y` (default 32), and
-  count the trial as depinned once *all* of row `Y+P` has flipped;
+  count the trial as depinned once *all* of row `Y+P` has flipped (or of
+  row `Y+P+H/2`, past a bubble of the old phase pinned on row `Y+P`);
   `Ly = Y+P+H`. `P` sets the finite-size regime (path over wall width,
   arXiv:1308.4329), and `H` must exceed the widest critical wall. The
   solver prints the critical wall's rows and a `WARNING` when it comes
