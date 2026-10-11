@@ -481,6 +481,40 @@ method is used because neighbouring points in $l$ are correlated, as
 they come from the same overlapping segments, so a fit's $\chi^2$
 doesn't give reliable errors.
 
+### 5.6 Bias of the local estimators
+
+`scripts/synthetic_profiles.py` feeds Gaussian single-valued profiles
+with a known $S(q)$ through the same measurement code. At $L=8192$, 30
+profiles, medians of the local exponent over a scale window:
+
+| input | window | $\zeta_W$ chord | $\zeta_W$ pca | $\zeta_S$ chord | $\zeta_S$ pca |
+|---|---|---|---|---|---|
+| pure 1.25 | $8\le l\le L/2$ | 1.237 | 1.227 | 1.295 | 1.328 |
+| 1.25 → 1.0 at $l_o=1500$ | $8\le l\le l_o/2$ | 1.232 | 1.220 | 1.291 | 1.315 |
+| 1.45 → 1.25 at $l_c=100$ → 1.0 at $l_o=1500$ | $2l_c\le l\le l_o/2$ | 1.229 | 1.221 | 1.266 | 1.292 |
+| same | $l\ge 2l_o$ | 0.985 | 0.953 | – | – |
+
+(Bootstrap errors 0.003–0.02; 0.04 above $l_o$. $\zeta_S$ is plotted
+and windowed at the probed wavelength $l/4$.)
+
+- **$W^2(l)$ reads low, $S(q,l)$ high**, by about the same amount with
+  or without crossovers nearby: $-0.02$ (chord) and $-0.03$ (pca) for
+  $\zeta_W$; $+0.02$ to $+0.05$ (chord) and $+0.04$ to $+0.08$ (pca) for
+  $\zeta_S$. A gap of $\approx0.05$ between $\zeta_W$ and $\zeta_S$ on
+  the same walls is therefore expected, not a sign of trouble.
+- **The estimators bracket the true exponent**, so the bias-corrected
+  values, or the range between $\zeta_W$ chord and $\zeta_S$ chord, are
+  what to quote.
+- **Caveat:** the walls are neither Gaussian nor single-valued (79 % of
+  the $L=8192$, $\Delta=0.3$ critical walls have overhangs), so their
+  bias may differ somewhat.
+
+First use (preliminary: 14 critical walls at $L=8192$, $\Delta=0.3$,
+saved $\lesssim0.5\,\%$ below $h_d$ with `--tol 1e-4`; window
+$200\le l\le750$): raw $\zeta_W$ = 1.189 (chord), 1.184 (pca); $\zeta_S$
+= 1.244 (chord), 1.282 (pca). Corrected with the third row: 1.210,
+1.213, 1.228, 1.240.
+
 ## 6. Two-crossover model for $\zeta_W(l)$
 
 `scripts/fit_crossovers.py`.

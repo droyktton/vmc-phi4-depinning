@@ -6,6 +6,8 @@ synthetic single-valued Gaussian profiles with a known structure factor
     S(q) ~ q^-(1+2 zeta2)   for q < 2 pi / l_o    (large scales)
 
 (continuous at q = 2 pi / l_o; pass --lo 0 for a pure zeta1 profile).
+With --lc, a third regime S(q) ~ q^-(1+2 zeta0) for q > 2 pi / l_c < l_o
+(the walls' Larkin regime: zeta0 ~ 1.5, zeta1 = zeta_q, zeta2 ~ 1).
 The amplitude is set by the rms nearest-neighbour step, --step.
 Each profile is turned into a curve (x, u(x)) and goes through exactly
 the same measurement code as the real walls (measure_curve), so this
@@ -25,10 +27,14 @@ import numpy as np
 import local_roughness as lr
 
 
-def synthetic_profile(L, zeta1, zeta2, lo, step, rng):
+def synthetic_profile(L, zeta1, zeta2, lo, step, rng, zeta0=None, lc=0):
     k = np.arange(1, L // 2 + 1)
     q = 2 * np.pi * k / L
     S = q ** -(1 + 2 * zeta1)
+    if lc > 0:
+        qc = 2 * np.pi / lc
+        high = q > qc
+        S[high] = qc ** -(1 + 2 * zeta1) * (q[high] / qc) ** -(1 + 2 * zeta0)
     if lo > 0:
         qo = 2 * np.pi / lo
         low = q < qo
@@ -47,6 +53,8 @@ def main():
     p.add_argument("--zeta1", type=float, default=1.25)
     p.add_argument("--zeta2", type=float, default=0.5)
     p.add_argument("--lo", type=float, default=64, help="crossover length (0: pure zeta1)")
+    p.add_argument("--zeta0", type=float, default=1.5, help="small-scale exponent, with --lc")
+    p.add_argument("--lc", type=float, default=0, help="small-scale crossover length (0: none)")
     p.add_argument("--step", type=float, default=0.5, help="rms nearest-neighbour height difference")
     p.add_argument("--outdir", required=True)
     p.add_argument("--seed", type=int, default=1)
@@ -61,7 +69,7 @@ def main():
     ls, rs = lr.grids(L)
     rows = []
     for _ in range(args.nsamples):
-        u = synthetic_profile(L, args.zeta1, args.zeta2, args.lo, args.step, rng)
+        u = synthetic_profile(L, args.zeta1, args.zeta2, args.lo, args.step, rng, args.zeta0, args.lc)
         # points at x+0.5, where univalued_profile samples the columns,
         # so that its linear interpolation doesn't smooth the profile
         x = np.arange(L + 1, dtype=float) + 0.5
@@ -78,6 +86,8 @@ def main():
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     name = f"synthetic_L{L}_z{args.zeta1:g}_{args.zeta2:g}_lo{args.lo:g}"
+    if args.lc > 0:
+        name += f"_z0{args.zeta0:g}_lc{args.lc:g}"
 
     print(f"{name}: n={args.nsamples}, zeta1={args.zeta1}, zeta2={args.zeta2}, l_o={args.lo}")
     print("\nlocal exponent, median over scale ranges (bootstrap error):")
@@ -85,6 +95,8 @@ def main():
             "zeta_B_chord", "zeta_B_pca", "zeta_S_chord", "zeta_S_pca"]
     lo = args.lo if args.lo > 0 else L
     ranges = [("8 <= l <= l_o/2", 8, lo / 2), ("l >= 2 l_o", 2 * lo, L)]
+    if args.lc > 0:
+        ranges = [("l <= l_c/2", 0, args.lc / 2), ("2 l_c <= l <= l_o/2", 2 * args.lc, lo / 2), ("l >= 2 l_o", 2 * lo, L)]
     print(f"  {'estimator':14s}" + "".join(f"{r[0]:>22s}" for r in ranges))
     for k in keys:
         x, y = full["curves"][k]

@@ -373,6 +373,16 @@ calibrate them. What it shows:
 - even without any crossover, the local exponent from `W2(l)` drops
   near `l ~ L/2` (finite size), so only `l_o` well below that is
   meaningful.
+- at `L=8192`, `W2(l)` reads ~0.02-0.03 below the input exponent and
+  `S(q,l)` ~0.02-0.08 above it (chord less than pca), with or without
+  crossovers nearby: the two bracket the true value. Table in
+  `docs/analysis_math.md` §5.6. `--zeta0 Z --lc LC` adds a small-scale
+  regime (the walls' Larkin regime) below `LC`:
+
+```
+python3 scripts/synthetic_profiles.py --L 8192 --nsamples 30 --zeta1 1.25 --zeta2 1.0 --lo 1500 \
+    --zeta0 1.45 --lc 100 --outdir data/synthetic8192
+```
 
 ### Overhang / structure-factor pipeline from the paper (gnuplot/awk/octave)
 
