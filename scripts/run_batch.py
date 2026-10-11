@@ -16,6 +16,8 @@ Example:
 """
 import argparse
 import csv
+import fcntl
+import os
 import re
 import shutil
 import subprocess
@@ -134,14 +136,18 @@ def main():
     done_seeds = set()
     if summary_path.exists():
         with open(summary_path) as f:
-            done_seeds = {int(row["seed"]) for row in csv.DictReader(f)}
+            done_seeds = {int(row["seed"]) for row in csv.DictReader(f) if row["seed"] != "seed"}
 
-    write_header = not summary_path.exists()
     n_warned = 0
     with open(summary_path, "a", newline="") as f:
         writer = csv.writer(f)
-        if write_header:
+        # several jobs (seed ranges) may share outdir and start together:
+        # only the first to lock an empty file writes the header
+        fcntl.flock(f, fcntl.LOCK_EX)
+        if f.seek(0, os.SEEK_END) == 0:
             writer.writerow(["seed", "h_d"])
+            f.flush()
+        fcntl.flock(f, fcntl.LOCK_UN)
         for i in range(args.nsamples):
             seed = args.seed_start + i
             if seed in done_seeds:
@@ -149,9 +155,9 @@ def main():
                 continue
             if args.adapt_headroom:
                 hd, warnings, headroom, attempts, ly = solve_adaptive(binary, args, seed, outdir, max_headroom)
-                new_file = not (outdir / "headroom.csv").exists()
                 with open(outdir / "headroom.csv", "a") as hf:
-                    if new_file:
+                    fcntl.flock(hf, fcntl.LOCK_EX)
+                    if hf.seek(0, os.SEEK_END) == 0:
                         hf.write("seed,headroom,attempts,Ly,warning\n")
                     hf.write(f"{seed},{headroom},{attempts},{ly},{int(bool(warnings))}\n")
             else:
