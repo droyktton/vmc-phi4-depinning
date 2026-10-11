@@ -35,6 +35,7 @@ SEED_START=${SEED_START:-1}
 LYK=${LYK:-}   # if set, Ly = LYK*L^1.25 (else a square L x L box)
 PATHLEN=${PATHLEN:-}    # if set (with HEADROOM): whole-row escape after PATHLEN rows,
 HEADROOM=${HEADROOM:-}  # Ly = 32+PATHLEN+HEADROOM (see ./phi4vmc --help)
+ADAPT=${ADAPT:-}        # if set (with PATHLEN): double a sample's headroom while its wall nears Ly
 TOL=${TOL:-1e-4}
 OUTROOT=${OUTROOT:-data/sweep}
 
@@ -53,4 +54,4 @@ HHIGH=${HHIGH:-$(python3 -c "print(1.15*$HEST)")}
 echo "=== $(hostname) GPU=${CUDA_VISIBLE_DEVICES:-?} Delta=$D L=$L LYK=${LYK:-square} PATHLEN=${PATHLEN:--} HEADROOM=${HEADROOM:--} h in [$HLOW, $HHIGH] ==="
 python3 -u scripts/run_batch.py --binary "./phi4vmc_D$D" --L "$L" \
     --h-low "$HLOW" --h-high "$HHIGH" --tol "$TOL" --nsamples "$NSAMPLES" --seed-start "$SEED_START" \
-    ${LYK:+--ly-k "$LYK"} ${PATHLEN:+--path "$PATHLEN" --headroom "$HEADROOM"} --dump-field --outdir "$OUTROOT/L${L}_D${D}"
+    ${LYK:+--ly-k "$LYK"} ${PATHLEN:+--path "$PATHLEN" --headroom "$HEADROOM"} ${ADAPT:+--adapt-headroom} --dump-field --outdir "$OUTROOT/L${L}_D${D}"
