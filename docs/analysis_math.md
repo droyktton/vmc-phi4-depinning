@@ -445,7 +445,7 @@ shifting the curves in $\ln l$ by $a_\Delta = \ln[l_o(\Delta)/l_o(\Delta_0)]$
 makes them all fall on top of each other. `collapse_shifts` minimises
 
 ```math
-\mathcal C(\lbrace a\rbrace) = \frac{1}{N_{\rm pairs}}\sum_{i<j}\big\langle [g_i(\ln l + a_i) - g_j(\ln l + a_j)]^2\big\rangle_{\rm overlap},
+\mathcal C(\lbrace a\rbrace) = \frac{1}{N_{\rm pairs}}\sum_{i\lt j}\big\langle [g_i(\ln l + a_i) - g_j(\ln l + a_j)]^2\big\rangle_{\rm overlap},
 ```
 
 with $a_{\Delta_0} = 0$ (Nelder–Mead). A pair of curves overlapping by
