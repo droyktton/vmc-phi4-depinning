@@ -45,7 +45,7 @@ with either boundary.)
 $h_d$ is the strongest pinning met over a path $0.75L_y$ long, and it
 grows with $L_y$. The wall's vertical extent grows as $L_x^{\zeta}$, so
 for finite-size scaling the box keeps its shape in those units,
-$L_y = k\,L_x^{\zeta}$ with $\zeta = 1.25$ and fixed $k$ (`--ly-k`,
+$`L_y = k\,L_x^{\zeta}`$ with $\zeta = 1.25$ and fixed $k$ (`--ly-k`,
 rounded to a multiple of 32). A square box has $k = L^{-1/4}$, which
 shrinks with $L$. At $L=1024$ the extent of the critical wall is
 0.02–0.08 $L_x^{1.25}$ on average (Δ = 0.4–1.0), up to 0.12; going from
@@ -151,7 +151,7 @@ dynamics.
   float arithmetic, though, converged sites keep flickering in the last
   bit, so no tile would ever go quiet. A change $|\delta\phi| \le$
   `TILE_EPS` $=10^{-6}$ is therefore applied but does not keep the tile
-  active. It leaves residuals $\sim c\,$`TILE_EPS` on the neighbours,
+  active. It leaves residuals $`\sim c\,`$`TILE_EPS` on the neighbours,
   well below the stopping cutoff, and each block of `chop` sweeps
   starts with one full sweep. Near $h_d$ the wall moves by local
   avalanches, and the work drops to a few % of the full sweeps.
@@ -165,12 +165,12 @@ v = \frac{1}{L}\sum_{i=1}^{L^2}\partial_t\phi_i
   (`velocity_phi`). It is normalised by $L$, not $L^2$: since $\phi$
   jumps by 2 across the wall, a wall of length $L$ moving at mean
   velocity $\bar v_{\rm wall}$ gives
-  $\sum_i\partial_t\phi_i\approx 2L\,\bar v_{\rm wall}$, so
+  $`\sum_i\partial_t\phi_i\approx 2L\,\bar v_{\rm wall}`$, so
   $v\approx 2\bar v_{\rm wall}$ whatever the size.
   and stops when $|v| <$ `TOLVEL` $= 10^{-4}$.
 - **Why that is not enough.** $v$ is a mean over the wall. A local
   avalanche of size $l$ moving at speed $v_a$ only contributes
-  $\sim l\,v_a/L$, so at large $L$ the relaxation can stop on a wall
+  $`\sim l\,v_a/L`$, so at large $L$ the relaxation can stop on a wall
   that is still moving. Relaxing the saved legacy critical
   configurations further, at the same $h$, showed that 13–43 % of them
   (by set, $L=1024$–$2048$, $\Delta=0.4$, $1.0$) were not metastable:
@@ -190,7 +190,7 @@ v = \frac{1}{L}\sum_{i=1}^{L^2}\partial_t\phi_i
   `CONFIRM_SWEEPS` $=1000$ sweeps (a mean speed 100 times below
   `TOLRES`); otherwise the wait starts again. Checks are made every
   `chop` = 1000 sweeps.
-- **Cap.** After $\max(2\times10^6,\,500L)$ sweeps (`MAXSWEEPS`,
+- **Cap.** After $`\max(2\times10^6,\,500L)`$ sweeps (`MAXSWEEPS`,
   `MAXSWEEPS_PER_L`) the relaxation gives up, and a trial still moving
   then counts as *depinned*. Near $h_d$ relaxations get very long at
   large $L$: at $L=8192$ a pinned trial took $8.3\times10^5$ sweeps to
@@ -269,10 +269,10 @@ that row anyway. Pinned trials never cross $y_e$, so they relax exactly
 as before and the saved critical configuration is unchanged. Checked on
 13 seeds: same $h_d$, and at $L=1024$ the total time dropped by 32 %.
 
-**Initial bracket.** `slurm_sweep.sh` uses $[0.85,\,1.15]\,h_{\rm est}$
-with $h_{\rm est} = 0.0195\,(\Delta/0.4)^{1.34}$, the fit of the
-$L=1024$–$2048$ sweep (§8); `sweep_disorder.sh` keeps $[0,\,3h_{\rm est}]$
-with $h_{\rm est} = 0.008\,(\Delta/0.2)^{4/3}$ (Larkin scaling, §7).
+**Initial bracket.** `slurm_sweep.sh` uses $`[0.85,\,1.15]\,h_{\rm est}`$
+with $`h_{\rm est} = 0.0195\,(\Delta/0.4)^{1.34}`$, the fit of the
+$L=1024$–$2048$ sweep (§8); `sweep_disorder.sh` keeps $`[0,\,3h_{\rm est}]`$
+with $`h_{\rm est} = 0.008\,(\Delta/0.2)^{4/3}`$ (Larkin scaling, §7).
 
 **Cost.** Per sample, on the same GPU, legacy vs. default: $L=2048$,
 $\Delta=0.4$: 254 s → 33 s (×8); $\Delta=1.0$: 250 s → 13 s (×19);
@@ -309,7 +309,7 @@ u(x) = \frac{1}{m(x)}\sum_{n=1}^{m(x)} u_n(x).
 ```
 
    A column has an overhang if $m(x)\ge 3$. From this,
-   $\rho_{\rm cols} = \langle\, \mathbb 1[m(x)\ge3]\,\rangle_x$ is the
+   $`\rho_{\rm cols} = \langle\, \mathbb 1[m(x)\ge3]\,\rangle_x`$ is the
    fraction of multivalued columns, and a sample counts as "having
    overhangs" if it has at least one.
 
@@ -346,9 +346,9 @@ starting every $l/2$ points along the period, `_segments`). Each segment
 is rigidly rotated so that its tilt $\theta$ becomes horizontal. With
 $(dx, dy)$ measured from the first point:
 
-- **Chord** (`chord`): $\theta = \operatorname{atan2}(dy_{\rm end}, dx_{\rm end})$,
+- **Chord** (`chord`): $\theta = \mathrm{atan2}(dy_{\rm end}, dx_{\rm end})$,
   the straight line between the ends.
-- **Principal axis** (`pca`): $\theta = \tfrac12\operatorname{atan2}(2s_{xy},\, s_{xx}-s_{yy})$,
+- **Principal axis** (`pca`): $`\theta = \tfrac12\mathrm{atan2}(2s_{xy},\, s_{xx}-s_{yy})`$,
   with $s$ the covariances of the segment's points. It is the axis of
   least perpendicular spread.
 
@@ -361,7 +361,7 @@ length $s$, is well defined even when the wall has overhangs. Averaging
 over segments:
 
 ```math
-W^2(l) = \left\langle \operatorname{var}_s h \right\rangle,\qquad
+W^2(l) = \left\langle \mathrm{var}_s h \right\rangle,\qquad
 B(r,l) = \left\langle[h(s+r)-h(s)]^2\right\rangle_{s},\qquad
 \theta^2(l) = \langle\theta^2\rangle .
 ```
@@ -423,7 +423,7 @@ within $\pm0.15$ decades of each $x$ (`local_slope`):
 The global $S$ is first averaged in logarithmic bins (12 per decade).
 From the local spectrum, $S(q,l)\sim q^{-(1+2\zeta)}$ is fitted over
 $k=2..8$ (FFT) or $k=4..16$ (DCT), i.e. over wavelengths $l/8..l/2$ in
-both cases, and $B(r,l)\sim r^{2\zeta}$ over $r\in[l/16,\, l/4]$.
+both cases, and $B(r,l)\sim r^{2\zeta}$ over $`r\in[l/16,\, l/4]`$.
 
 ### 5.2 Definitions of $l_o$
 
@@ -445,7 +445,7 @@ shifting the curves in $\ln l$ by $a_\Delta = \ln[l_o(\Delta)/l_o(\Delta_0)]$
 makes them all fall on top of each other. `collapse_shifts` minimises
 
 ```math
-\mathcal C(\{a\}) = \frac{1}{N_{\rm pairs}}\sum_{i<j}\big\langle [g_i(\ln l + a_i) - g_j(\ln l + a_j)]^2\big\rangle_{\rm overlap},
+\mathcal C(\lbrace a\rbrace) = \frac{1}{N_{\rm pairs}}\sum_{i<j}\big\langle [g_i(\ln l + a_i) - g_j(\ln l + a_j)]^2\big\rangle_{\rm overlap},
 ```
 
 with $a_{\Delta_0} = 0$ (Nelder–Mead). A pair of curves overlapping by
@@ -510,7 +510,7 @@ and windowed at the probed wavelength $l/4$.)
   bias may differ somewhat.
 
 First use (preliminary: 14 critical walls at $L=8192$, $\Delta=0.3$,
-saved $\lesssim0.5\,\%$ below $h_d$ with `--tol 1e-4`; window
+saved $`\lesssim0.5\,\%`$ below $h_d$ with `--tol 1e-4`; window
 $200\le l\le750$): raw $\zeta_W$ = 1.189 (chord), 1.184 (pca); $\zeta_S$
 = 1.244 (chord), 1.282 (pca). Corrected with the third row: 1.210,
 1.213, 1.228, 1.240.
@@ -541,7 +541,7 @@ widths in $\ln l$.
 
 ### 6.2 Equivalent form for $W^2(l)$
 
-Since $\zeta = \tfrac12\,d\ln W^2/d\ln l$, integrating gives
+Since $`\zeta = \tfrac12\,d\ln W^2/d\ln l`$, integrating gives
 
 ```math
 W^2(l) = A\,l^{2\zeta_L}\,\Big[1+(l/L_c)^{n_1}\Big]^{2(\zeta_q-\zeta_L)/n_1}\,\Big[1+(l/l_o)^{n_2}\Big]^{2(\zeta_\infty-\zeta_q)/n_2},\qquad n_i = 1/w_i,
@@ -561,7 +561,7 @@ laws.
 ### 6.3 Why no plateau is seen
 
 A logistic step goes from 10 % to 90 % over
-$\Delta\ln l = 2\ln 9\cdot w \approx 4.4\,w$, i.e. $\approx 1.9\,w$
+$`\Delta\ln l = 2\ln 9\cdot w \approx 4.4\,w`$, i.e. $`\approx 1.9\,w`$
 decades. For $\zeta(l)$ to get close to $\zeta_q$ both tails have to be
 saturated, and to see a plateau $D$ decades wide,
 
@@ -569,7 +569,7 @@ saturated, and to see a plateau $D$ decades wide,
 \log_{10}\frac{l_o}{L_c} \gtrsim 0.95\,(w_1 + w_2) + D .
 ```
 
-From the fit, $l_o/L_c = (b/a)\,\Delta^{-(\alpha - x_c)} \approx 5\,\Delta^{-1.43}$.
+From the fit, $`l_o/L_c = (b/a)\,\Delta^{-(\alpha - x_c)} \approx 5\,\Delta^{-1.43}`$.
 That is ≈ 5 at $\Delta=1$ and ≈ 19 at $\Delta=0.4$, whereas merely
 reaching $\zeta_q$ needs $\gtrsim 30$ ($\Delta\approx0.28$), and a
 one-decade plateau $\gtrsim 300$ ($\Delta\approx0.057$).
@@ -598,9 +598,9 @@ it depends on the assumed shape of the step $s(x)$, $x = \ln(l/\ell)$.
 | form | $s(x)$ | approach to the limits |
 |---|---|---|
 | `logistic` | $1/(1+e^{-x/w})$ | power law $(l/\ell)^{\pm 1/w}$, same on both sides |
-| `erf` | $\tfrac12[1+\operatorname{erf}(x/w)]$ | Gaussian in $\ln l$ |
+| `erf` | $\tfrac12[1+\mathrm{erf}(x/w)]$ | Gaussian in $\ln l$ |
 | `asym` | $(1+\nu e^{-x/w})^{-1/\nu}$ (Richards) | power law, rate $1/(w\nu)$ below and $1/w$ above |
-| `sum` | no free width: $1/W^2 = \sum_i (l/\ell_i)^{-2\zeta_i}$ | $\zeta(l) = \sum_i\zeta_i t_i/\sum_i t_i$ ($t_i$ the terms), a logistic of fixed width $w = 1/(2|\delta\zeta|)$ |
+| `sum` | no free width: $1/W^2 = \sum_i (l/\ell_i)^{-2\zeta_i}$ | $\zeta(l) = \sum_i\zeta_i t_i/\sum_i t_i$ ($t_i$ the terms), a logistic of fixed width $w = 1/(2\lvert\delta\zeta\rvert)$ |
 
 In `sum`, each regime is an independent contribution to $W^2$ and the
 one with the smallest $W^2$ dominates. Its widths are fixed by the jumps
@@ -646,7 +646,7 @@ unrelaxed walls biased it down.
 ## 7. Larkin scaling
 
 **Effective elasticity.** For slow displacements the wall is an elastic
-line $u(x)$ with surface tension $\gamma\sim\sqrt{c\,\epsilon_0}$. The
+line $u(x)$ with surface tension $`\gamma\sim\sqrt{c\,\epsilon_0}`$. The
 random-bond disorder couples to it through the energy
 
 ```math
