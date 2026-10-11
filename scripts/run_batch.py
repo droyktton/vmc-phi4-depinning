@@ -68,6 +68,8 @@ def solve_adaptive(binary, args, seed, outdir, max_headroom):
             shutil.rmtree(tmp)
         tmp.mkdir()
         box_args = ["--path", str(args.path), "--headroom", str(headroom)]
+        if args.y0 is not None:
+            box_args += ["--y0", str(args.y0)]
         hd, warnings, ly = run_one(binary, args.L, args.h_low, args.h_high, args.tol, seed, cwd=tmp,
                                    with_magjumps=args.with_magjumps, dump_field=args.dump_field, box_args=box_args)
         if not warnings or 2 * headroom > max_headroom:
@@ -92,8 +94,9 @@ def main():
     p.add_argument("--ly-k", type=float, default=None,
                    help="Ly = k*L^1.25 (see ./phi4vmc --help); default: square L x L")
     p.add_argument("--path", type=int, default=None,
-                   help="with --headroom: whole-row escape after P rows, Ly = 32+P+H (see ./phi4vmc --help)")
+                   help="with --headroom: whole-row escape after P rows, Ly = y0+P+H (see ./phi4vmc --help)")
     p.add_argument("--headroom", type=int, default=None)
+    p.add_argument("--y0", type=int, default=None, help="starting row with --path (default: the solver's, 32)")
     p.add_argument("--adapt-headroom", action="store_true",
                    help="if a sample's critical wall comes close to Ly (WARNING), solve that seed again with twice "
                         "the headroom, up to --max-headroom. The disorder of a site doesn't depend on Ly, so it is "
@@ -117,6 +120,8 @@ def main():
         box_args += ["--ly-k", str(args.ly_k)]
     if args.path is not None:
         box_args += ["--path", str(args.path), "--headroom", str(args.headroom)]
+        if args.y0 is not None:
+            box_args += ["--y0", str(args.y0)]
 
     binary = Path(args.binary).resolve()
     if not binary.exists():
