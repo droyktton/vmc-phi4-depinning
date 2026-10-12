@@ -64,12 +64,16 @@ typedef float REAL;
 // later. Counting a capped trial as depinned keeps every saved critical
 // configuration a confirmed fixed point; h_d can then only come out
 // low, and only if a pinned relaxation outlasts the cap. (The original
-// cap, 1e8 sweeps, was in practice an unbounded wait.)
+// cap, 1e8 sweeps, was in practice an unbounded wait.) With the long
+// path of --path (kappa=20), 500*Lx was too short: at L=8192 pinned
+// trials converged after up to 3.5e6 sweeps, and a trial that hit the
+// 4.1e6 cap and was counted as depinned lay below a field where the same
+// sample had pinned (h_d ~0.4% low); hence 2000*Lx.
 #ifndef MAXSWEEPS
 #define MAXSWEEPS 2000000
 #endif
 #ifndef MAXSWEEPS_PER_L
-#define MAXSWEEPS_PER_L 500
+#define MAXSWEEPS_PER_L 2000
 #endif
 
 // convergence cutoff on the largest residual max_i |dphi_i/dt| (local

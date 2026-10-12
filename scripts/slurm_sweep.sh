@@ -38,6 +38,7 @@ HEADROOM=${HEADROOM:-}  # Ly = 32+PATHLEN+HEADROOM (see ./phi4vmc --help)
 ADAPT=${ADAPT:-}        # if set (with PATHLEN): double a sample's headroom while its wall nears Ly
 TOL=${TOL:-1e-4}
 OUTROOT=${OUTROOT:-data/sweep}
+BIN=${BIN:-./phi4vmc_D}    # binary prefix: runs ${BIN}<Delta>
 
 read -ra DARR <<< "$DELTAS"
 read -ra LARR <<< "$LS"
@@ -52,6 +53,6 @@ HEST=$(python3 -c "print(0.0195*($D/0.4)**1.34)")
 HLOW=${HLOW:-$(python3 -c "print(0.85*$HEST)")}
 HHIGH=${HHIGH:-$(python3 -c "print(1.15*$HEST)")}
 echo "=== $(hostname) GPU=${CUDA_VISIBLE_DEVICES:-?} Delta=$D L=$L LYK=${LYK:-square} PATHLEN=${PATHLEN:--} HEADROOM=${HEADROOM:--} h in [$HLOW, $HHIGH] ==="
-python3 -u scripts/run_batch.py --binary "./phi4vmc_D$D" --L "$L" \
+python3 -u scripts/run_batch.py --binary "${BIN}$D" --L "$L" \
     --h-low "$HLOW" --h-high "$HHIGH" --tol "$TOL" --nsamples "$NSAMPLES" --seed-start "$SEED_START" \
     ${LYK:+--ly-k "$LYK"} ${PATHLEN:+--path "$PATHLEN" --headroom "$HEADROOM"} ${ADAPT:+--adapt-headroom} --dump-field --outdir "$OUTROOT/L${L}_D${D}"
