@@ -7,7 +7,8 @@ the wall (`scripts/wall_contour.py`), the roughness estimators
 (`scripts/roughness_estimators.py`, `scripts/local_roughness.py`), and
 the two-crossover model (`scripts/fit_crossovers.py`). The results of
 the `L = 1024, 2048` sweep are at the end (figures in
-`results/sweep_L1024_L2048/`).
+`results/sweep_L1024_L2048/`); those of the $\kappa=20$ production at
+$L=8192$, $\Delta=0.3$ in §5.6 (figures in `results/kappa20_L8192_D0.3/`).
 
 Reference: A. B. Kolton, E. E. Ferrero, A. Rosso, Phys. Rev. B **108**,
 174201 (2023).
@@ -537,6 +538,15 @@ walls, saved up to 0.5 % below $h_d$, read lower. For this set,
 $\langle h_d\rangle = 0.013392\pm0.000008$, and $l_o$ = 1504 ± 140
 (chord) and 1167 ± 190 (pca) from the multivalued fraction, against
 $`102\,\Delta^{-2.1}\approx1280`$.
+
+![Local exponents, L=8192, Delta=0.3](../results/kappa20_L8192_D0.3/zeta_local_L8192.png)
+
+![Crossover indicators, L=8192, Delta=0.3](../results/kappa20_L8192_D0.3/crossover_indicators_L8192.png)
+
+The plateau of $S(q,l)$ (chord) and $W^2(l)$ near 1.2–1.25 spans
+$100\lesssim l\lesssim2000$; above, the multivalued fraction rises and the
+local exponent of $W^2$ drops towards 1. The global $S(q)$ and $B(r)$ of
+$u(x)$ are useless here: 93 % of the walls have overhangs.
 
 ## 6. Two-crossover model for $\zeta_W(l)$
 
