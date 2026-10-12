@@ -190,7 +190,7 @@ v = \frac{1}{L}\sum_{i=1}^{L^2}\partial_t\phi_i
   `CONFIRM_SWEEPS` $=1000$ sweeps (a mean speed 100 times below
   `TOLRES`); otherwise the wait starts again. Checks are made every
   `chop` = 1000 sweeps.
-- **Cap.** After $`\max(2\times10^6,\,500L)`$ sweeps (`MAXSWEEPS`,
+- **Cap.** After $`\max(2\times10^6,\,2000L)`$ sweeps (`MAXSWEEPS`,
   `MAXSWEEPS_PER_L`) the relaxation gives up, and a trial still moving
   then counts as *depinned*. Near $h_d$ relaxations get very long at
   large $L$: at $L=8192$ a pinned trial took $8.3\times10^5$ sweeps to
@@ -202,6 +202,17 @@ v = \frac{1}{L}\sum_{i=1}^{L^2}\partial_t\phi_i
   $h_d$ that can only come out low, and only if a pinned relaxation
   outlasts the cap. The solver prints "still moving at the cap" when
   that happens.
+- **The cap must exceed the slowest pinned relaxation, which grows with
+  the path.** With the $\kappa=20$ path ($P=10911$ rows at $L=8192$),
+  pinned trials converged after up to $5.2\times10^6$ sweeps, past the
+  former $500L=4.1\times10^6$. With that cap, 8 of 18 production samples
+  ($L=8192$, $\Delta=0.3$) ended with a capped trial as the upper
+  bracket; re-solved with $2000L$, 6 of them rose by 0.05–0.85 % and 2
+  were unchanged (sample 18 had pinned, in an earlier run, above the
+  field where its capped trial was counted as depinned). The mean of the
+  18 was 0.16 % low, 1.5 times its statistical error (0.11 %). Check
+  "still moving at the cap" in the logs: no capped trial should set the
+  final upper bracket.
 
 ### 2.3 Depinning field by bisection
 
@@ -509,11 +520,23 @@ and windowed at the probed wavelength $l/4$.)
   the $L=8192$, $\Delta=0.3$ critical walls have overhangs), so their
   bias may differ somewhat.
 
-First use (preliminary: 14 critical walls at $L=8192$, $\Delta=0.3$,
-saved $`\lesssim0.5\,\%`$ below $h_d$ with `--tol 1e-4`; window
-$200\le l\le750$): raw $\zeta_W$ = 1.189 (chord), 1.184 (pca); $\zeta_S$
-= 1.244 (chord), 1.282 (pca). Corrected with the third row: 1.210,
-1.213, 1.228, 1.240.
+Applied to the critical walls at $L=8192$, $\Delta=0.3$ ($\kappa=20$
+box, window $200\le l\le750$, $\zeta_S$ at $l/4$ in the window),
+corrected with the third row:
+
+| walls | $\zeta_W$ chord | $\zeta_W$ pca | $\zeta_S$ chord | $\zeta_S$ pca |
+|---|---|---|---|---|
+| 30 samples, `--tol 1e-5`, cap $2000L$ (final), raw | 1.211 | 1.206 | 1.274 | 1.296 |
+| same, corrected | **1.232** | **1.235** | **1.258** | **1.254** |
+| 14 samples, `--tol 1e-4` (preliminary), raw | 1.192 | 1.184 | 1.244 | 1.282 |
+| same, corrected | 1.213 | 1.213 | 1.228 | 1.240 |
+
+The four corrected estimators of the final set agree within 0.03, at
+$\zeta_q\approx1.245\pm0.015$ (their mean and half-spread), consistent with the qEW value 1.25. The preliminary
+walls, saved up to 0.5 % below $h_d$, read lower. For this set,
+$\langle h_d\rangle = 0.013392\pm0.000008$, and $l_o$ = 1504 ± 140
+(chord) and 1167 ± 190 (pca) from the multivalued fraction, against
+$`102\,\Delta^{-2.1}\approx1280`$.
 
 ## 6. Two-crossover model for $\zeta_W(l)$
 

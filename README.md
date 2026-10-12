@@ -178,8 +178,9 @@ Two things keep this bounded rather than unpredictable:
   deliberately in the slow region, and was the dominant cost at large
   `L` even after the fix below.
 - **`MAXSWEEPS`** (`misistema.h`) caps how long `find_next_metastable`
-  waits for a trial to converge or escape: max(2×10⁶, 500 L) sweeps (at
-  `L=8192`, one pinned trial took 8.3×10⁵ to converge). A trial still
+  waits for a trial to converge or escape: max(2×10⁶, 2000 L) sweeps (at
+  `L=8192` with the κ=20 path, pinned trials took up to 5.2×10⁶ to
+  converge; the former 500 L cap left `h_d` 0.16 % low on average). A trial still
   moving at the cap counts as depinned, so the saved critical
   configuration is always a confirmed fixed point (a capped trial
   counted as pinned was seen to escape later, at `L=8192`). The
