@@ -617,6 +617,100 @@ medium, which the $\phi^4$ wall with isotropic disorder does not have.
 
 ![h_d spread vs L](../results/hd_variance/hd_variance.png)
 
+### 5.8 Threshold versus tilt: isotropic and anisotropic disorder
+
+`scripts/hd_tilt.py`, on runs with the helical boundary `--tilt m` (§1),
+which imposes a mean wall slope $s = m/L$. For each $s$, 30 seeds and
+`--tol 1e-5`. The quantity plotted is $`\langle h_d\rangle(s)/\langle h_d\rangle(0)`$,
+where $`\langle h_d\rangle(0)`$ is the fitted value at $s=0$, with error
+bars equal to the standard error of the mean. The lines are weighted fits
+$`\langle h_d\rangle(s) = a + b\,s + \tfrac12 h_d''\,s^2`$.
+
+**Why this test.** The field $h$ is a pressure: it pushes the wall along
+its normal with the same strength at any orientation. In an isotropic
+medium the pinning is also the same at any orientation, so the threshold
+does not depend on $s$; the only $s$-dependence of the velocity is the
+projection $v_y = v_n\sqrt{1+s^2}$, which vanishes at threshold. That is
+qEW. In the KPZ equation
+$`\partial_t u = c\,\nabla^2 u + \tfrac{\lambda}{2}(\nabla u)^2 + F`$,
+a tilt $s$ adds $`\tfrac{\lambda}{2}s^2`$ to the drive, so the threshold
+becomes $`F_c(s) = F_c(0) - \tfrac{\lambda}{2}s^2`$: a curvature of
+$h_d(s)$ at threshold is a nonzero $`\lambda = -h_d''(0)`$, the coupling
+that makes depinning qKPZ (Tang, Kardar, Dhar, PRL **74**, 920 (1995)).
+It only appears if the medium is anisotropic.
+
+**Isotropic disorder** (`results/hd_tilt/hd_tilt.png`; $L=512$ and 1024,
+$\Delta=0.3$ and 1.0, $\kappa=20$ boxes):
+
+![h_d vs tilt, isotropic](../results/hd_tilt/hd_tilt.png)
+
+All points lie within 1 % of 1 up to $\lvert s\rvert = 0.3$ (a 17° tilt),
+most within one or two standard errors, and the fitted curvature is zero
+within its error:
+
+| $L$ | $\Delta$ | $h_d''(0)/\langle h_d\rangle(0)$ | $\chi^2$ (4 dof) |
+|---|---|---|---|
+| 512 | 0.3 | −0.06 ± 0.12 | 1.6 |
+| 512 | 1.0 | −0.03 ± 0.05 | 3.0 |
+| 1024 | 0.3 | −0.04 ± 0.06 | 1.8 |
+| 1024 | 1.0 | −0.01 ± 0.03 | 1.9 |
+
+The lines drawn through the points are these fits: their apparent bends
+are within the error bars, and they bend both ways. The linear term $b$,
+which should vanish by the $x\to-x$ symmetry, is also compatible with zero
+(−1.9σ to +1.3σ). So the square lattice adds no measurable anisotropy,
+and $\lambda = 0$: a direct confirmation of qEW, independent of $\zeta$
+(§5.6) and of the spread of $h_d$ (§5.7).
+
+**Block disorder** (`results/hd_tilt_aniso/hd_tilt.png`; $L=512$,
+$\Delta=0.3$, $r$ constant over blocks of $AX\times AY$ sites, same box as
+the isotropic $\kappa=20$ one):
+
+![h_d vs tilt, block disorder](../results/hd_tilt_aniso/hd_tilt.png)
+
+| blocks | $`\langle h_d\rangle(0)`$ | $s=-0.3$ / $+0.3$ | $h_d''(0)/\langle h_d\rangle(0)$ |
+|---|---|---|---|
+| 1×1 (isotropic) | 0.01341 | +0.4 / −0.3 % | −0.06 ± 0.12 |
+| 2×2 (control) | 0.02421 | −1.0 / 0.0 % | −0.12 ± 0.12 |
+| 2×1 | 0.01978 | −3.2 / −2.7 % | −0.60 ± 0.09 |
+| 4×1 | 0.02631 | −11.1 / −10.5 % | −2.26 ± 0.11 |
+| 8×1 | 0.02949 | −29.4 / −29.7 % | ≈ −6 (parabola fails, $\chi^2=42/4$) |
+| 1×2 | 0.01632 | +0.5 / +0.4 % | +0.09 ± 0.14 |
+| 1×4 | 0.01469 | +0.4 / +1.6 % | +0.13 ± 0.24 |
+| 1×8 | 0.01006 | +1.5 / +2.7 % | +0.38 ± 0.29 |
+
+What the figure shows:
+
+- **Blocks elongated along the wall ($AX>AY$: red, brown, pink)** give
+  curves that fall symmetrically on both sides of $s=0$, more steeply the
+  longer the block: at $s=\pm0.3$, $h_d$ drops by 3 % (2×1), 11 % (4×1)
+  and 30 % (8×1). A flat wall lies along the stripes of equal disorder and
+  is pinned by whole stripes; a tilted wall cuts across them and averages
+  the disorder over more blocks, so it depins more easily. Hence
+  $h_d''<0$, i.e. $\lambda>0$ in the KPZ convention above, growing fast
+  with $AX/AY$. For 8×1 the curve is not a parabola: it falls faster than
+  the fit between $s=0.1$ and 0.2 and flattens towards 0.3, where it is
+  already 30 % down; a fit restricted to small $\lvert s\rvert$ would be
+  needed for its curvature.
+- **Blocks elongated along the motion ($AY>AX$: blue, orange, green)**
+  stay within 3 % of 1 and, if anything, rise with $\lvert s\rvert$
+  ($\lambda<0$), but by at most 1.3σ: no conclusion yet.
+- **The square 2×2 control (purple) is flat**, like the isotropic case.
+  The effect therefore comes from the rectangular shape of the blocks,
+  not from correlating the disorder or from the lattice.
+- **The absolute thresholds change a lot with the blocks** (from 0.010 to
+  0.030 at the same $\Delta$), and the boxes were not recalibrated, so
+  $\kappa$ is not exactly 20 here. That doesn't affect the curvatures,
+  which are ratios at fixed geometry, but $h_d(0)$ should not be compared
+  across rows.
+
+**Consequence.** Disorder correlated along the wall produces the qKPZ
+coupling at depinning, with $\lambda>0$, the sign of the
+directed-percolation depinning class ($\zeta\approx0.63$). The next test is
+the roughness of the 4×1 and 8×1 walls at $s=0$ and larger $L$, with $P$
+recalibrated from their width: qKPZ predicts the local exponent to cross
+over from 1.25 to about 0.63 above a length set by $\lambda$.
+
 ## 6. Two-crossover model for $\zeta_W(l)$
 
 `scripts/fit_crossovers.py`.
