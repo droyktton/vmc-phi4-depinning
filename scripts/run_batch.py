@@ -72,6 +72,8 @@ def solve_adaptive(binary, args, seed, outdir, max_headroom):
         box_args = ["--path", str(args.path), "--headroom", str(headroom)]
         if args.y0 is not None:
             box_args += ["--y0", str(args.y0)]
+        if args.tilt:
+            box_args += ["--tilt", str(args.tilt)]
         hd, warnings, ly = run_one(binary, args.L, args.h_low, args.h_high, args.tol, seed, cwd=tmp,
                                    with_magjumps=args.with_magjumps, dump_field=args.dump_field, box_args=box_args)
         if not warnings or 2 * headroom > max_headroom:
@@ -99,6 +101,8 @@ def main():
                    help="with --headroom: whole-row escape after P rows, Ly = y0+P+H (see ./phi4vmc --help)")
     p.add_argument("--headroom", type=int, default=None)
     p.add_argument("--y0", type=int, default=None, help="starting row with --path (default: the solver's, 32)")
+    p.add_argument("--tilt", type=int, default=0,
+                   help="with --path: helical BC, mean wall slope tilt/L (even; see ./phi4vmc --help)")
     p.add_argument("--adapt-headroom", action="store_true",
                    help="if a sample's critical wall comes close to Ly (WARNING), solve that seed again with twice "
                         "the headroom, up to --max-headroom. The disorder of a site doesn't depend on Ly, so it is "
@@ -124,6 +128,8 @@ def main():
         box_args += ["--path", str(args.path), "--headroom", str(args.headroom)]
         if args.y0 is not None:
             box_args += ["--y0", str(args.y0)]
+        if args.tilt:
+            box_args += ["--tilt", str(args.tilt)]
 
     binary = Path(args.binary).resolve()
     if not binary.exists():

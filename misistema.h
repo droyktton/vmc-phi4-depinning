@@ -2,9 +2,11 @@
 //
 // Model (arXiv:2306.13415):
 //   dphi/dt = c*Laplacian(phi) + eps0*[(1+r(x,y))*phi - phi^3] + h
-// with r(x,y) uncorrelated random-bond disorder, uniform in [-Delta,Delta]
-// (Delta == AMPDIS), on an LxL grid, periodic in x and anti-periodic in y
-// (so a single domain wall spans the sample). Elementary VMC move: replace
+// with r(x,y) random-bond disorder, uniform in [-Delta,Delta] (Delta ==
+// AMPDIS), uncorrelated between AX x AY blocks of sites (1x1 by default),
+// on an Lx x Ly grid, periodic in x (or helical, phi(x+Lx,y)=phi(x,y-m),
+// imposing a mean tilt m/Lx) and anti-periodic in y (so a single domain
+// wall spans the sample). Elementary VMC move: replace
 // phi_ij by the root of the cubic steady-state equation (dphi_ij/dt=0)
 // closest to its current value, sweeping the lattice with a checkerboard
 // decomposition (two-color updates run in parallel on the GPU).
@@ -49,6 +51,14 @@ typedef float REAL;
 #endif
 #ifndef R0
 #define R0	1.0	// bare (undisordered) coefficient of phi
+#endif
+// r(x,y) is constant over blocks of AX x AY sites (correlated disorder,
+// anisotropic for AX != AY); 1x1 is uncorrelated
+#ifndef AX
+#define AX 1
+#endif
+#ifndef AY
+#define AY 1
 #endif
 
 #ifndef TOLVEL
@@ -122,13 +132,16 @@ int vieta_solver(float p, float q, float &x1, float &x2, float &x3)
 	}
 }
 
-// quenched random-bond disorder r(i,j), uniform in [-AMPDIS,AMPDIS],
+// quenched random-bond disorder r(x,y), uniform in [-AMPDIS,AMPDIS],
 // generated on the fly (no stored array) from a counter-based RNG keyed
-// by the site index and the disorder seed, so it is deterministic and
-// identical every time the same site is queried.
+// by the site's block (x/AX, y/AY) and the disorder seed, so it is
+// deterministic and identical every time the same site is queried. With
+// AX=AY=1 the key is the site index x+Lx*y. It doesn't depend on Ly, so
+// a taller box holds the same sample.
 __device__
-float site_disorder(int site_index, unsigned long disorder_seed)
+float site_disorder(int x, int y, int Lx, unsigned long disorder_seed)
 {
+	int site_index=(x/AX)+(Lx/AX)*(y/AY);
 	RNG rng;
 	RNG::ctr_type c={{}};
 	RNG::key_type k={{}};
@@ -139,18 +152,37 @@ float site_disorder(int site_index, unsigned long disorder_seed)
 	return AMPDIS*(2.0*u01_open_closed_32_53(r[0])-1.0);
 }
 
+// phi of the right (dir=+1) or left (dir=-1) neighbor of (x,y). Across
+// the x boundary the BC is helical, phi(x+Lx,y) = phi(x,y-tilt): a wall
+// at height u(x) continues at u(x)+tilt one period later, i.e. its mean
+// slope is tilt/Lx (tilt=0: periodic). The shifted row may wrap around
+// the anti-periodic seam in y, phi(x,y+Ly) = -phi(x,y), flipping the
+// sign. tilt must be even, so that neighbors keep opposite checkerboard
+// colors (x+y parity) across the boundary.
+__device__ inline
+float phi_x_neighbor(const float *phi, int x, int y, int Lx, int Ly, int tilt, int dir)
+{
+	int xn=x+dir, yn=y;
+	if(xn==Lx){ xn=0; yn=y-tilt; }
+	else if(xn<0){ xn=Lx-1; yn=y+tilt; }
+	float sign=1;
+	while(yn>=Ly){ yn-=Ly; sign=-sign; }
+	while(yn<0){ yn+=Ly; sign=-sign; }
+	return sign*phi[xn+Lx*yn];
+}
+
 // residual "velocity" dphi_ij/dt of the steady-state equation, used only
 // to measure how close the lattice is to a metastable state (the VMC
 // update itself does not use this functor)
 struct velocityop
 {
-	int Lx, Ly;
+	int Lx, Ly, tilt;
 	float * phi;
 	float external_field;
 	unsigned long disorder_seed;
 
-	velocityop(float *_phi, int _Lx, int _Ly, float _external_field, unsigned long _disorder_seed):
-	phi(_phi),Lx(_Lx),Ly(_Ly),external_field(_external_field),disorder_seed(_disorder_seed){};
+	velocityop(float *_phi, int _Lx, int _Ly, int _tilt, float _external_field, unsigned long _disorder_seed):
+	phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),external_field(_external_field),disorder_seed(_disorder_seed){};
 
 	__device__
 	float operator()(int i)
@@ -159,14 +191,12 @@ struct velocityop
 		int y=int(i/Lx);
 
 		int y_plus1=(y+1)%Ly, y_minus1=(y-1+Ly)%Ly;
-		int x_plus1=(x+1)%Lx, x_minus1=(x-1+Lx)%Lx;
 
 		int up=x+Lx*y_minus1, down=x+Lx*y_plus1;
-		int right=x_plus1+Lx*y, left=x_minus1+Lx*y;
 		int center=x+Lx*y;
 
 		float phi_up=phi[up], phi_down=phi[down];
-		float phi_right=phi[right], phi_left=phi[left];
+		float phi_right=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,1), phi_left=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,-1);
 		float phi_center=phi[center];
 
 		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
@@ -176,7 +206,7 @@ struct velocityop
 		if(y==Ly-1) phi_down*=-1;
 
 		float laplacian = phi_up+phi_down+phi_right+phi_left-4.0*phi_center;
-		float r = site_disorder(center, disorder_seed);
+		float r = site_disorder(x, y, Lx, disorder_seed);
 		float phi4_force = EPSILON0*(R0*(1.0+r)*phi_center - phi_center*phi_center*phi_center);
 
 		return CEL*laplacian + phi4_force + external_field;
@@ -222,14 +252,14 @@ float vmc_site_update(float phi_center, float sum_neighbors, float r, float exte
 // each site's four neighbors always belong to the other color.
 struct vmcop
 {
-	int Lx, Ly;
+	int Lx, Ly, tilt;
 	float * phi;
 	float external_field;
 	int color_offset;
 	unsigned long disorder_seed;
 
-	vmcop(float *_phi, int _Lx, int _Ly, float _external_field, int _color_offset, unsigned long _disorder_seed)
-	:phi(_phi),Lx(_Lx),Ly(_Ly),external_field(_external_field),color_offset(_color_offset),disorder_seed(_disorder_seed)
+	vmcop(float *_phi, int _Lx, int _Ly, int _tilt, float _external_field, int _color_offset, unsigned long _disorder_seed)
+	:phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),external_field(_external_field),color_offset(_color_offset),disorder_seed(_disorder_seed)
 	{};
 
 	__device__
@@ -241,14 +271,12 @@ struct vmcop
 		int y=int(i/Lx);
 
 		int y_plus1=(y+1)%Ly, y_minus1=(y-1+Ly)%Ly;
-		int x_plus1=(x+1)%Lx, x_minus1=(x-1+Lx)%Lx;
 
 		int up=x+Lx*y_minus1, down=x+Lx*y_plus1;
-		int right=x_plus1+Lx*y, left=x_minus1+Lx*y;
 		int center=x+Lx*y;
 
 		float phi_up=phi[up], phi_down=phi[down];
-		float phi_right=phi[right], phi_left=phi[left];
+		float phi_right=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,1), phi_left=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,-1);
 		float phi_center=phi[center];
 
 		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
@@ -258,7 +286,7 @@ struct vmcop
 		if(y==Ly-1) phi_down*=-1;
 
 		phi[center]=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
-			site_disorder(center, disorder_seed),external_field);
+			site_disorder(x, y, Lx, disorder_seed),external_field);
 	}
 };
 
@@ -279,7 +307,7 @@ struct vmcop
 #define TILE_EPS 1e-6
 #endif
 __global__
-void vmc_tiles_kernel(float *phi, int Lx, int Ly, float external_field, int color_offset,
+void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, float external_field, int color_offset,
 	unsigned long disorder_seed, const unsigned char *active, unsigned char *changed,
 	unsigned long long *work, float tile_eps)
 {
@@ -293,10 +321,9 @@ void vmc_tiles_kernel(float *phi, int Lx, int Ly, float external_field, int colo
 	x+=(y+color_offset)&1; // this color: x = y+color_offset (mod 2), as in vmcop
 
 	int y_plus1=(y+1)%Ly, y_minus1=(y-1+Ly)%Ly;
-	int x_plus1=(x+1)%Lx, x_minus1=(x-1+Lx)%Lx;
 	int center=x+Lx*y;
 	float phi_up=phi[x+Lx*y_minus1], phi_down=phi[x+Lx*y_plus1];
-	float phi_right=phi[x_plus1+Lx*y], phi_left=phi[x_minus1+Lx*y];
+	float phi_right=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,1), phi_left=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,-1);
 	float phi_center=phi[center];
 
 	// anti-periodic BC in y (see velocityop)
@@ -304,29 +331,40 @@ void vmc_tiles_kernel(float *phi, int Lx, int Ly, float external_field, int colo
 	if(y==Ly-1) phi_down*=-1;
 
 	float new_phi=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
-		site_disorder(center, disorder_seed),external_field);
+		site_disorder(x, y, Lx, disorder_seed),external_field);
 	if(new_phi!=phi_center){
 		phi[center]=new_phi;
 		if(fabsf(new_phi-phi_center)>tile_eps) changed[tile]=1;
 	}
 }
 
-// active[t] = some site changed in tile t or in one of its 4 neighbors
+// active[t] = some site changed in tile t or in one of its 4 neighbors.
+// Across the x boundary the helical BC shifts rows by tilt, so there the
+// neighbor "tile" is the (up to) two tiles of the other edge column that
+// hold rows y-tilt (right) or y+tilt (left) for the rows y of this tile.
+__device__ inline
+unsigned char changed_across(const unsigned char *changed, int tx_other, int ty, int Tx, int Ty, int shift)
+{
+	int Ly=Ty*TILE;
+	int y0=((ty*TILE+shift)%Ly+Ly)%Ly, y1=((ty*TILE+TILE-1+shift)%Ly+Ly)%Ly;
+	return changed[tx_other+Tx*(y0/TILE)] | changed[tx_other+Tx*(y1/TILE)];
+}
 __global__
-void spread_activity(const unsigned char *changed, unsigned char *active, int Tx, int Ty)
+void spread_activity(const unsigned char *changed, unsigned char *active, int Tx, int Ty, int tilt)
 {
 	int tile=blockIdx.x*blockDim.x+threadIdx.x;
 	if(tile>=Tx*Ty) return;
 	int tx=tile%Tx, ty=tile/Tx;
-	active[tile]=changed[tile] | changed[(tx+1)%Tx+Tx*ty] | changed[(tx-1+Tx)%Tx+Tx*ty]
+	unsigned char right = tx==Tx-1 ? changed_across(changed,0,ty,Tx,Ty,-tilt) : changed[tx+1+Tx*ty];
+	unsigned char left = tx==0 ? changed_across(changed,Tx-1,ty,Tx,Ty,tilt) : changed[tx-1+Tx*ty];
+	active[tile]=changed[tile] | right | left
 		| changed[tx+Tx*((ty+1)%Ty)] | changed[tx+Tx*((ty-1+Ty)%Ty)];
 }
 
 __host__ __device__ int index_center(int x,int y,int Lx,int Ly){ return x+Lx*y; }
 __host__ __device__ int index_up(int x,int y,int Lx,int Ly){ return x+Lx*((y-1+Ly)%Ly); }
 __host__ __device__ int index_down(int x,int y,int Lx,int Ly){ return x+Lx*((y+1)%Ly); }
-__host__ __device__ int index_right(int x,int y,int Lx,int Ly){ return (x+1)%Lx+Lx*y; }
-__host__ __device__ int index_left(int x,int y,int Lx,int Ly){ return (x-1+Lx)%Lx+Lx*y; }
+// (x neighbors: phi_x_neighbor, which knows the helical BC)
 
 // detects domain-wall sites, restricted to the [x1,x2]x[y1,y2] window
 // (to avoid picking up the periodic-image seam). Each site is first
@@ -337,17 +375,17 @@ __host__ __device__ int index_left(int x,int y,int Lx,int Ly){ return (x-1+Lx)%L
 // configuration has overhangs/pinch-off loops (see paper, Fig. 1).
 struct is_wall_smooth
 {
-	int Lx, Ly;
+	int Lx, Ly, tilt;
 	float *phi;
 	int x1, x2, y1, y2;
-	is_wall_smooth(float *_phi, int _Lx, int _Ly, int _x1, int _x2, int _y1, int _y2):
-	phi(_phi),Lx(_Lx),Ly(_Ly),x1(_x1),x2(_x2),y1(_y1),y2(_y2){};
+	is_wall_smooth(float *_phi, int _Lx, int _Ly, int _tilt, int _x1, int _x2, int _y1, int _y2):
+	phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),x1(_x1),x2(_x2),y1(_y1),y2(_y2){};
 
 	__device__
 	float smoothed(int x, int y)
 	{
 		return phi[index_center(x,y,Lx,Ly)]+phi[index_up(x,y,Lx,Ly)]+phi[index_down(x,y,Lx,Ly)]
-			+phi[index_right(x,y,Lx,Ly)]+phi[index_left(x,y,Lx,Ly)];
+			+phi_x_neighbor(phi,x,y,Lx,Ly,tilt,1)+phi_x_neighbor(phi,x,y,Lx,Ly,tilt,-1);
 	}
 
 	__device__
@@ -387,6 +425,18 @@ struct is_positive
 	bool operator()(float x){ return x > 0; }
 };
 
+// initial straight wall y = y_low + tilt*x/Lx (phi=+1 below, -1 above)
+struct tilted_wall
+{
+	int Lx, y_low, tilt;
+	tilted_wall(int _Lx, int _y_low, int _tilt):Lx(_Lx),y_low(_y_low),tilt(_tilt){};
+	__host__ __device__
+	float operator()(int i){
+		int x=i%Lx, y=i/Lx;
+		return y < y_low + (long(tilt)*x)/Lx ? 1.0f : -1.0f;
+	}
+};
+
 class System{
 	private:
 		thrust::device_ptr<float> d_phi;
@@ -401,8 +451,9 @@ class System{
 		int wall_first_index;
 		int wall_last_index;
 
-		int Lx;   // along the wall (periodic)
+		int Lx;   // along the wall (periodic, or helical with tilt)
 		int Ly;   // along the motion (anti-periodic)
+		int tilt; // helical BC phi(x+Lx,y)=phi(x,y-tilt): mean wall slope tilt/Lx
 		int L2;   // Lx*Ly
 
 		float external_field;
@@ -436,9 +487,15 @@ class System{
 				exit(1);
 			}
 
+			if(_Lx%AX!=0){
+				std::cout << "ERROR: Lx must be a multiple of AX=" << AX << std::endl;
+				exit(1);
+			}
+
 			Lx=_Lx;
 			Ly=_Ly;
 			L2=Lx*Ly;
+			tilt=0;
 
 			d_phi = thrust::device_malloc<float>(L2);
 			d_saved = thrust::device_malloc<float>(L2);
@@ -473,6 +530,8 @@ class System{
 			log << "CEL (c)= " << CEL << std::endl;
 			log << "EPSILON0= " << EPSILON0 << std::endl;
 			log << "R0= " << R0 << std::endl;
+			log << "AX= " << AX << std::endl;
+			log << "AY= " << AY << std::endl;
 			log << "TOLVEL (epsilon)= " << TOLVEL << std::endl;
 		}
 
@@ -485,12 +544,19 @@ class System{
 			thrust::device_free(d_snap);
 		}
 
-		// flat interface: phi=+1 for y<y_level, phi=-1 for y>=y_level
+		// flat interface: phi=+1 for y<y_level, phi=-1 for y>=y_level; with
+		// a tilt, the straight wall y_level+tilt*x/Lx (shifted up by -tilt
+		// if tilt<0, so that its lowest row is y_level)
 		void set_flat_interface(int y_level)
 		{
-			int split=y_level*Lx;
-			thrust::fill(d_phi, d_phi+split, 1);
-			thrust::fill(d_phi+split, d_phi+L2, -1);
+			if(tilt==0){
+				int split=y_level*Lx;
+				thrust::fill(d_phi, d_phi+split, 1);
+				thrust::fill(d_phi+split, d_phi+L2, -1);
+				return;
+			}
+			thrust::transform(thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2),
+				d_phi, tilted_wall(Lx, y_level-std::min(tilt,0), tilt));
 		};
 		void set_flat_interface(){ set_flat_interface(y_start); }
 
@@ -498,6 +564,17 @@ class System{
 		{
 			y_start=_y_start; escape_row=_escape_row; escape_full=_escape_full;
 		}
+		void set_tilt(int m)
+		{
+			if(m%2!=0){
+				std::cout << "ERROR: the tilt must be even (checkerboard colors across the x boundary)" << std::endl;
+				exit(1);
+			}
+			tilt=m;
+			std::ofstream log("logfile.dat",std::ios::app);
+			log << "tilt= " << tilt << std::endl;
+		}
+		int get_tilt(){ return tilt; }
 		int get_y_start(){ return y_start; }
 		int get_escape_row(){ return escape_row; }
 		bool get_escape_full(){ return escape_full; }
@@ -548,7 +625,7 @@ class System{
 					thrust::for_each(
 						thrust::make_counting_iterator(0),
 						thrust::make_counting_iterator(half_L2),
-						vmcop(phi_ptr,Lx,Ly,external_field,color_offset,disorder_seed)
+						vmcop(phi_ptr,Lx,Ly,tilt,external_field,color_offset,disorder_seed)
 					);
 				}
 				total_time++;
@@ -569,10 +646,10 @@ class System{
 			{
 				for(int color_offset=0;color_offset<2;color_offset++){
 					cudaMemset(changed,0,ntiles);
-					vmc_tiles_kernel<<<ntiles,TILE*TILE/2>>>(phi_ptr,Lx,Ly,external_field,color_offset,
+					vmc_tiles_kernel<<<ntiles,TILE*TILE/2>>>(phi_ptr,Lx,Ly,tilt,external_field,color_offset,
 						disorder_seed,active,changed,work,tile_eps);
 					if(sweep==0 && color_offset==0) cudaMemset(active,1,ntiles);
-					else spread_activity<<<(ntiles+255)/256,256>>>(changed,active,Tx,Ty);
+					else spread_activity<<<(ntiles+255)/256,256>>>(changed,active,Tx,Ty,tilt);
 				}
 				total_time++;
 			}
@@ -586,7 +663,7 @@ class System{
 			return thrust::transform_reduce(
 				thrust::make_counting_iterator(0),
 				thrust::make_counting_iterator(L2),
-				velocityop(phi_ptr,Lx,Ly,external_field,disorder_seed),
+				velocityop(phi_ptr,Lx,Ly,tilt,external_field,disorder_seed),
 				float(0.0), thrust::plus<float>()
 			)/float(Lx);
 		}
@@ -598,7 +675,7 @@ class System{
 			return thrust::transform_reduce(
 				thrust::make_counting_iterator(0),
 				thrust::make_counting_iterator(L2),
-				abs_velocityop(velocityop(phi_ptr,Lx,Ly,external_field,disorder_seed)),
+				abs_velocityop(velocityop(phi_ptr,Lx,Ly,tilt,external_field,disorder_seed)),
 				0.0f, thrust::maximum<float>());
 		}
 
@@ -678,7 +755,7 @@ class System{
 		{
 			// counted first, so the buffer is only as large as the wall
 			// (rather than a whole extra field's worth of GPU memory)
-			is_wall_smooth is_wall(phi_ptr,Lx,Ly,x1,x2,y1,y2);
+			is_wall_smooth is_wall(phi_ptr,Lx,Ly,tilt,x1,x2,y1,y2);
 			int num_wall_points = thrust::count_if(
 				thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2), is_wall);
 			d_wall_site_indices.resize(num_wall_points);

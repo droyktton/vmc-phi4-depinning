@@ -93,6 +93,32 @@ On $L=512$, Δ = 1 with 30 seeds and a starting $H = 64$, 5 seeds needed
 $H$ = 256–512. All 30 $h_d$ then agreed with a run at $H = 2000$, with
 extents up to 387 rows ≈ 0.4 P.
 
+**Tilt and anisotropic disorder.** For qKPZ depinning the threshold
+must depend on the wall's mean slope $s$, with
+$`\lambda_c = F_c''(0) \neq 0`$ (Tang, Kardar, Dhar, PRL **74**, 920
+(1995)). In an isotropic medium $F_c(s)$ is flat (the projection term is
+$\propto v$ and vanishes at threshold), hence qEW. Two options probe and
+break this:
+
+- **`--tilt m`**: helical boundary in $x$,
+  $`\phi(x+L_x,y) = \phi(x,y-m)`$, so the wall has mean slope
+  $s = m/L_x$. Across the boundary the shifted row can wrap around the
+  anti-periodic seam (sign flip). $m$ must be even so that $x$-neighbours
+  keep opposite checkerboard colours, and the active-tile bookkeeping
+  takes the shifted rows into account. The wall starts straight, with
+  its lowest row at $y_0$, and $L_y = y_0+P+\lvert m\rvert+H$. Checks
+  (L = 512, Δ = 0.3): with $m=0$ the critical fields are bit-for-bit
+  those of the previous code (3 seeds); with $m=\pm64$ active tiles and
+  whole-lattice sweeps give bit-identical fields; the saved wall is
+  continuous across the boundary, $u(L_x-1)\approx u(0)+m$.
+- **Block disorder** (`AX`, `AY` at compile time): $r(x,y)$ is constant
+  over blocks of $AX\times AY$ sites, keyed by the block, so it is
+  correlated and, for $AX\neq AY$, anisotropic. Anisotropic elasticity
+  alone ($c_x\neq c_y$) would not do: a rescaling of $x$ and $y$ makes it
+  isotropic, and uncorrelated disorder stays uncorrelated. Blocks of
+  $4\times1$ about double $h_d$ at Δ = 0.3 (0.0269 against 0.0136 on one
+  seed), so Δ must be lowered to compare at equal $h_d$.
+
 **Equilibrium states.** Without disorder or field the local minima are
 $\phi = \pm 1$. The flat wall is $\phi_0(y-u) = \tanh[(y-u)/\xi\sqrt2]$
 (with the sign set by the boundary), of width $\xi = \sqrt{c/\epsilon_0}$

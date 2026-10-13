@@ -39,6 +39,13 @@
 // WARNING if it comes within WALL_MARGIN rows of the escape row
 // (legacy criterion) or of Ly (--path).
 //
+// Tilt: with --tilt m (even, needs --path) the x boundary is helical,
+// phi(x+Lx,y) = phi(x,y-m), so the wall has a mean slope m/Lx. It starts
+// as the straight wall from row y0 (its lowest row) rising by |m| over
+// Lx, escapes once all of row y0+P has flipped, and Ly = y0+P+|m|+H.
+// h_d versus m/Lx measures the tilt dependence of the threshold (a
+// nonzero curvature is the qKPZ coupling at depinning).
+//
 // Around h_d, scan_magnetization_jumps() additionally records the
 // metastable-state sequence (magnetization jumps / "avalanches") on a
 // finer field grid. This scan probes 100 fields all within 5% of h_d,
@@ -214,7 +221,7 @@ int main(int argc, char **argv)
 	int L; float h_low,h_high,tol; unsigned long disorder_seed;
 	bool with_magjumps=false, dump_field=false, verify_cold=false, bad_flag=false;
 	float tolres=-1, tile_eps=-1, ly_k=-1;
-	int Ly=-1, path=-1, headroom=-1, y0=Y0_DEFAULT;
+	int Ly=-1, path=-1, headroom=-1, y0=Y0_DEFAULT, tilt=0;
 	std::string relax_from;
 	bool no_warm=false, no_tiles=false;
 	for(int i=6;i<argc;i++){
@@ -232,10 +239,12 @@ int main(int argc, char **argv)
 		else if(flag=="--path" && i+1<argc) path=atoi(argv[++i]);
 		else if(flag=="--headroom" && i+1<argc) headroom=atoi(argv[++i]);
 		else if(flag=="--y0" && i+1<argc) y0=atoi(argv[++i]);
+		else if(flag=="--tilt" && i+1<argc) tilt=atoi(argv[++i]);
 		else bad_flag=true;
 	}
 	// --path and --headroom go together, and replace --ly/--ly-k
 	if((path>0)!=(headroom>0) || (path>0 && (Ly>0 || ly_k>0))) bad_flag=true;
+	if(tilt!=0 && path<=0) bad_flag=true;
 	if(argc>=6 && !bad_flag){
 		L=atoi(argv[1]);
 		h_low=atof(argv[2]);
@@ -264,13 +273,15 @@ int main(int argc, char **argv)
 		std::cout << "                  (both: start at 0.2Ly, depinned once some site of row 0.95Ly flips)" << std::endl;
 		std::cout << "  --path P --headroom H [--y0 Y]  instead: start at row Y (default " << Y0_DEFAULT << "), depinned once" << std::endl;
 		std::cout << "                  all of row Y+P has flipped, Ly = Y+P+H rounded up to a multiple of 32" << std::endl;
+		std::cout << "  --tilt m        (with --path) helical BC phi(x+L,y)=phi(x,y-m): mean wall slope m/L (m even);" << std::endl;
+		std::cout << "                  Ly = Y+P+|m|+H" << std::endl;
 		std::cout << "  --tolres x      convergence cutoff on max|dphi/dt| (default " << TOLRES << "; 0: legacy mean-velocity criterion)" << std::endl;
 		std::cout << "example: " << argv[0] << " 256 0.0 0.1 0.0001 1234" << std::endl;
 		return 1;
 	}
 
 	if(ly_k>0) Ly=32*std::max(1,int(lround(ly_k*pow(double(L),LY_ZETA)/32)));
-	if(path>0) Ly=32*int((long(y0)+path+headroom+31)/32);
+	if(path>0) Ly=32*int((long(y0)+path+std::abs(tilt)+headroom+31)/32);
 	if(Ly<=0) Ly=L;
 	if(double(L)*Ly>=2147483648.0){
 		std::cerr << "ERROR: Lx*Ly = " << double(L)*Ly << " overflows the 32-bit site index" << std::endl;
@@ -278,8 +289,12 @@ int main(int argc, char **argv)
 	}
 	System sys(L,Ly,disorder_seed);
 	if(path>0) sys.set_geometry(y0,y0+path,true);
+	if(tilt!=0) sys.set_tilt(tilt);
 	std::cout << "Lx=" << L << " Ly=" << Ly << " start=" << sys.get_y_start() << " escape_row=" << sys.get_escape_row()
-		<< " criterion=" << (sys.get_escape_full() ? "whole row" : "any site") << std::endl;
+		<< " criterion=" << (sys.get_escape_full() ? "whole row" : "any site");
+	if(tilt!=0) std::cout << " tilt=" << tilt << " (slope " << double(tilt)/L << ")";
+	if(AX!=1 || AY!=1) std::cout << " disorder blocks " << AX << "x" << AY;
+	std::cout << std::endl;
 	if(tolres>=0) sys.set_tolres(tolres);
 	if(no_tiles) sys.set_use_tiles(false);
 	if(tile_eps>=0) sys.set_tile_eps(tile_eps);

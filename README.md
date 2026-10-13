@@ -114,6 +114,17 @@ rebuilding with a different `AMPDIS`.
   within 32 rows of `Ly`. `run_batch.py --adapt-headroom` then solves that
   seed again with twice the headroom: the disorder doesn't depend on
   `Ly`, so it is the same sample. See `docs/analysis_math.md` §1.
+- `--tilt m` (with `--path`): helical boundary in x,
+  `phi(x+L, y) = phi(x, y-m)`, so the wall has a mean slope `m/L` (`m`
+  even, to keep the checkerboard colors across the boundary). The wall
+  starts straight, with its lowest row at `Y`, and `Ly = Y+P+|m|+H`.
+  `h_d` versus `m/L` measures how the threshold depends on the wall's
+  tilt: a curvature is the qKPZ coupling at depinning (Tang, Kardar,
+  Dhar 1995). The analysis scripts (`wall_contour.py`) still assume
+  `m = 0`.
+- Block disorder (compile time, `make AX=4 AY=1 ...`): `r(x,y)` is
+  constant over blocks of `AX x AY` sites, an anisotropic correlated
+  disorder for `AX != AY`; `AX = AY = 1` is the uncorrelated default.
 - Checks and comparisons: `--verify-cold` (relax again from a flat
   interface at `h_d` and compare), `--no-warm` (every trial from a flat
   interface), `--no-tiles` (sweep the whole lattice), `--tolres x`

@@ -5,6 +5,8 @@
 #   make AMPDIS=0.4 CEL=1.0
 # TARGET names the binary (to keep one per Delta), e.g.:
 #   make AMPDIS=0.6 TARGET=phi4vmc_D0.6
+# anisotropic (block-correlated) disorder, e.g.:
+#   make AMPDIS=0.3 AX=4 AY=1 TARGET=phi4vmc_D0.3_ax4ay1
 #
 # The GPU architecture is picked automatically: on a machine with a
 # visible GPU (e.g. a laptop), its compute capability (nvidia-smi); with
@@ -14,8 +16,11 @@ AMPDIS=0.2
 CEL=1.0
 EPSILON0=1.0
 R0=1.0
+# disorder correlated over AX x AY blocks of sites (1x1: uncorrelated)
+AX=1
+AY=1
 
-FLAGS=-DAMPDIS=$(AMPDIS) -DCEL=$(CEL) -DEPSILON0=$(EPSILON0) -DR0=$(R0)
+FLAGS=-DAMPDIS=$(AMPDIS) -DCEL=$(CEL) -DEPSILON0=$(EPSILON0) -DR0=$(R0) -DAX=$(AX) -DAY=$(AY)
 
 TARGET=phi4vmc
 
