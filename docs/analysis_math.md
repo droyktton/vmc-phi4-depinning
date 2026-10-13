@@ -565,8 +565,7 @@ $\sigma^2$ (at most 6 %, at $L=2048$, $\Delta=0.2$).
 
 Most fits lie between 0.75 and 0.9, slightly above $2-\zeta_q$; with 30
 samples per point and a factor 8 in $L$ that is about as far as these
-data go. The $L=8192$, $\kappa=20$ point ($\sigma/\langle h_d\rangle =
-0.31\,\%$) falls on the $L^{-0.75}$ continuation of the $\Delta=0.3$
+data go. The $L=8192$, $\kappa=20$ point ($`\sigma/\langle h_d\rangle = 0.31\,\%`$) falls on the $L^{-0.75}$ continuation of the $\Delta=0.3$
 curves (right panel of the figure), so over $L=2048$–8192 the slope is
 $\approx0.75$.
 
