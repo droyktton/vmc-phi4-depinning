@@ -548,6 +548,30 @@ $100\lesssim l\lesssim2000$; above, the multivalued fraction rises and the
 local exponent of $W^2$ drops towards 1. The global $S(q)$ and $B(r)$ of
 $u(x)$ are useless here: 93 % of the walls have overhangs.
 
+### 5.7 Sample-to-sample spread of $h_d$
+
+`scripts/hd_variance.py` (figure in `results/hd_variance/`). At fixed
+$\kappa$, the spread of the threshold should scale as
+$`\sigma(h_d)\propto L^{-1/\nu}`$ with $1/\nu = 2-\zeta_q = 0.75$. The
+bisection grid (step $`\approx 6`$–$`8\times10^{-5}`$ with `--tol 1e-4`)
+is removed with Sheppard's correction $-\mathrm{step}^2/12$ on
+$\sigma^2$ (at most 6 %, at $L=2048$, $\Delta=0.2$).
+
+| $\Delta$ | $\kappa$ | $1/\nu$ ($L=256$–2048) |
+|---|---|---|
+| 0.2 | 15 / 25 / 40 | 0.91 ± 0.08 / 0.76 ± 0.09 / 0.82 ± 0.10 |
+| 0.3 | 15 / 25 | 0.77 ± 0.07 / 0.89 ± 0.07 |
+| 1.0 | 15 / 25 | 1.10 ± 0.07 / 0.85 ± 0.08 |
+
+Most fits lie between 0.75 and 0.9, slightly above $2-\zeta_q$; with 30
+samples per point and a factor 8 in $L$ that is about as far as these
+data go. The $L=8192$, $\kappa=20$ point ($\sigma/\langle h_d\rangle =
+0.31\,\%$) falls on the $L^{-0.75}$ continuation of the $\Delta=0.3$
+curves (right panel of the figure), so over $L=2048$–8192 the slope is
+$\approx0.75$.
+
+![h_d spread vs L](../results/hd_variance/hd_variance.png)
+
 ## 6. Two-crossover model for $\zeta_W(l)$
 
 `scripts/fit_crossovers.py`.
