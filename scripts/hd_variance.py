@@ -94,6 +94,34 @@ for g in groups:
     if len(sel) >= 3:
         a, x, ex, chi2, dof = fit(sel)
         lines.append(f"{'':21} L>=512      1/nu = {x:.3f} +- {ex:.3f}   chi2/dof = {chi2:.1f}/{dof}")
+
+# qEW (1/nu = 2 - zeta = 0.75) vs qKPZ (directed-percolation depinning: no tilt
+# symmetry, so nu = nu_par = 1.734, 1/nu = 0.577), slope fixed, one amplitude per
+# (Delta, kappa); and a common free slope
+lines.append('')
+lines.append('# slope fixed at qEW 0.75 / qKPZ 0.577, free amplitude per (Delta, kappa)')
+data = {g: [(r['L'], r['sig'], r['err']) for r in rows if (r['D'], r['K']) == g] for g in groups}
+tot, dof = {0.75: 0., 0.577: 0.}, 0
+for g, v in data.items():
+    L, s, e = map(np.array, zip(*v))
+    y, w = np.log(s), (s / e) ** 2
+    c2 = {}
+    for x in tot:
+        a = np.sum(w * (y + x * np.log(L))) / w.sum()
+        c2[x] = np.sum(w * (y + x * np.log(L) - a) ** 2)
+        tot[x] += c2[x]
+    dof += len(L) - 1
+    lines.append(f"Delta={g[0]:<4} kappa={g[1]:<3} n={len(L)}  chi2(0.75) = {c2[0.75]:5.1f}  chi2(0.577) = {c2[0.577]:5.1f}")
+lines.append(f"total ({dof} dof): chi2(0.75) = {tot[0.75]:.1f}  chi2(0.577) = {tot[0.577]:.1f}")
+X, Y, W = [], [], []
+for i, g in enumerate(groups):
+    for L, s, e in data[g]:
+        row = np.zeros(len(groups) + 1); row[i] = 1; row[-1] = -np.log(L)
+        X.append(row); Y.append(np.log(s)); W.append((s / e) ** 2)
+X, Y, W = map(np.array, (X, Y, W))
+cov = np.linalg.inv(X.T @ (X * W[:, None])); b = cov @ (X.T @ (W * Y))
+lines.append(f"common free slope: 1/nu = {b[-1]:.3f} +- {np.sqrt(cov[-1, -1]):.3f}"
+             f"  chi2 = {np.sum(W * (Y - X @ b) ** 2):.1f}/{len(Y) - len(b)}")
 print('\n'.join(lines))
 (out / 'hd_variance.dat').write_text('#' + '\n'.join(lines) + '\n')
 

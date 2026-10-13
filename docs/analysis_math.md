@@ -563,11 +563,31 @@ $\sigma^2$ (at most 6 %, at $L=2048$, $\Delta=0.2$).
 | 0.3 | 15 / 25 | 0.77 ± 0.07 / 0.89 ± 0.07 |
 | 1.0 | 15 / 25 | 1.10 ± 0.07 / 0.85 ± 0.08 |
 
-Most fits lie between 0.75 and 0.9, slightly above $2-\zeta_q$; with 30
-samples per point and a factor 8 in $L$ that is about as far as these
-data go. The $L=8192$, $\kappa=20$ point ($`\sigma/\langle h_d\rangle = 0.31\,\%`$) falls on the $L^{-0.75}$ continuation of the $\Delta=0.3$
-curves (right panel of the figure), so over $L=2048$–8192 the slope is
-$\approx0.75$.
+Most fits lie between 0.75 and 0.9, slightly above $2-\zeta_q$. The
+$L=8192$, $\kappa=20$ point ($`\sigma/\langle h_d\rangle = 0.31\,\%`$)
+falls on the $L^{-0.75}$ continuation of the $\Delta=0.3$ curves (right
+panel of the figure): between $L=2048$ ($\kappa=15$ or 25) and 8192 the
+slope is 0.67–0.78, with an error of about ±0.1.
+
+**qEW vs qKPZ.** In 1+1, qKPZ depinning maps onto directed percolation:
+$`\zeta = \nu_\perp/\nu_\parallel = 1.097/1.734 \approx 0.63`$ and
+$`\nu = \nu_\parallel \approx 1.73`$, so $1/\nu\approx0.58$. Without the
+statistical tilt symmetry, $\nu = 1/(2-\zeta)$ does not hold for qKPZ; it
+would give 0.73, nearly the qEW value. Fixing the slope and fitting one
+amplitude per $(\Delta,\kappa)$:
+
+| slope | $\chi^2$ (21 dof) |
+|---|---|
+| 0.75 (qEW) | 44 (26 of it from $\Delta=1$, $\kappa=15$) |
+| 0.577 (qKPZ) | 130 (worse for every set) |
+
+A common free slope gives $1/\nu = 0.88\pm0.03$ ($\chi^2 = 24/20$),
+above both: corrections to scaling from $L=256$ up. The spread therefore
+favours qEW without pinning $1/\nu$ to 0.75. The roughness is the
+decisive test: $\zeta = 1.23$–1.26 on the plateau (§5.6) against 0.63
+for qKPZ, and the effective exponent above $l_o$ tends to 1, not 0.63.
+A qKPZ term needs a slope-dependent velocity, i.e. an anisotropic
+medium, which the $\phi^4$ wall with isotropic disorder does not have.
 
 ![h_d spread vs L](../results/hd_variance/hd_variance.png)
 
