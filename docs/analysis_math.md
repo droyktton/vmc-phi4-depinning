@@ -797,12 +797,36 @@ local $S(q,l)$ agrees (0.6–0.7 above $l\approx300$); the $B(r)$
 estimators (global and local) sit lower, at about 0.5 for $r\gtrsim500$,
 and have no clear plateau; this is not understood yet.
 
-**Global $S(q)$** (`results/aniso_weak/Sq/`, $q = 2\pi/l$): weighted fits
-of $`S\propto q^{-(1+2\zeta)}`$ at $L=8192$ give
-$2.27\pm0.06$ for $l = 300$–2000 ($\zeta = 0.63$; prediction 2.26) and
-$2.68\pm0.03$ for $l = 40$–300, inside the crossover. At $L=4096$ and 2048
-the long-wavelength slope is $2.39\pm0.10$ and $2.26\pm0.28$; at
-$L\le1024$ that window doesn't exist yet.
+**Global $S(q)$** (`scripts/sq_regimes.py` on `results/aniso_weak/Sq/`,
+$q = 2\pi/l$). $S(q)/L$ is binned logarithmically; the right panel shows
+the local slope $`-d\ln S/d\ln q = 1+2\zeta`$ between successive bins, and
+the red segments are weighted power-law fits at the largest $L$
+(`Sq_regimes.dat`):
+
+![S(q) regimes, 8x1 blocks](../results/aniso_weak/Sq/Sq_regimes.png)
+
+All $L$ fall on one curve, and it has three regimes:
+
+| regime | window in $l$ | $1+2\zeta$ ($L=8192$) | $\zeta$ | range over $L$ |
+|---|---|---|---|---|
+| short scales | 2–6 | $0.93\pm0.01$ | ≈ 0 | 0.93–1.04 |
+| intermediate | 15–40 | $3.70\pm0.04$ | 1.35 | 3.56–3.92 |
+| long scales | 300–2000 | $2.27\pm0.07$ | 0.63 | 2.39 ± 0.13 at $L=4096$ |
+
+- **$l\lesssim8$:** $S\propto q^{-1}$, a nearly flat profile below the
+  block length $AX=8$, with a dip of the slope at $l\approx6$–8. It is set
+  by the block shape and by the lattice: it is not universal.
+- **$l\approx15$–40:** the steepest part, with local slopes up to 3.7–3.9
+  at $l\approx20$–30. That lies between qEW (3.5) and Larkin (4), and
+  matches $\zeta_W\approx1.3$–1.5 at the same $l$ in the table above. It
+  is not a clean plateau, because the slope starts falling right after its
+  maximum. It is the qEW (or Larkin–qEW) regime of the isotropic walls,
+  cut short by $\ell_\times\approx35$.
+- **$l\gtrsim100$:** the slope decreases through the crossover
+  (2.7 at $l\approx100$) to the qKPZ value. In $q^{2.26}S$ (left panel)
+  it is flat from $q\approx0.05$ ($l\approx120$) down to the smallest
+  $q$. The local slopes at $l>300$ scatter between 1.5 and 3.6 (few modes
+  per bin), but the fit over the window has $\chi^2 = 14/19$.
 
 **Threshold vs tilt** (`results/aniso_weak/tilt/`):
 
