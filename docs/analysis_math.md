@@ -639,6 +639,58 @@ $h_d(s)$ at threshold is a nonzero $`\lambda = -h_d''(0)`$, the coupling
 that makes depinning qKPZ (Tang, Kardar, Dhar, PRL **74**, 920 (1995)).
 It only appears if the medium is anisotropic.
 
+**The tilt in the KPZ equation.** Write $u = s\,x + \delta u$, with
+$\delta u$ periodic (that is what the helical boundary imposes). Then
+
+```math
+(\nabla u)^2 = s^2 + 2s\,\nabla\delta u + (\nabla\delta u)^2 ,
+```
+
+```math
+\partial_t\delta u = c\,\nabla^2\delta u + \lambda s\,\nabla\delta u
+ + \tfrac{\lambda}{2}(\nabla\delta u)^2 + \Big(F + \tfrac{\lambda}{2}s^2\Big) + \eta(x,u).
+```
+
+- **The linear term** $\lambda s\,\nabla\delta u$ is a drift along $x$
+  at speed $\lambda s$. In the thermal KPZ equation it can be removed by
+  going to the frame $x' = x + \lambda s\,t$. With quenched disorder it
+  can't be removed, because the disorder is fixed in the lab frame: it
+  makes the landscape seen by $\delta u$ asymmetric in $x$. Under
+  $x\to-x$, $s\to-s$ and the disorder is statistically unchanged, so
+  $F_c(s)$ is even in $s$ and this term too shifts $F_c$ starting at
+  order $s^2$ (e.g. at second order in $\lambda s$). The measured
+  curvature is therefore an effective coupling,
+  $`\lambda_{\rm eff} = -h_d''(0)`$, which contains $\lambda$ plus this
+  contribution. Its sign, not the bare $\lambda$, is what is compared
+  with the classes below. The higher orders in $s$ are not controlled
+  either, which is one possible reason the parabola fails beyond
+  $\lvert s\rvert\approx0.1$ (§5.9).
+- **The constant** $\tfrac{\lambda}{2}s^2$ adds to the drive. So
+  $\delta u$ sees an effective force $F + \tfrac{\lambda}{2}s^2$, and it
+  depins when that reaches $F_c(0)$:
+
+```math
+F_c(s) = F_c(0) - \tfrac{\lambda_{\rm eff}}{2}\,s^2 + O(s^4),\qquad
+\lambda_{\rm eff} = -\,F_c''(0) = -\,h_d''(0).
+```
+
+**Velocity vs threshold.** At fixed $F$ above threshold, the same
+argument gives $v(s) = v(0) + \tfrac{\lambda}{2}s^2$: for $\lambda>0$,
+$v(s)$ is convex, with its minimum at $s=0$. Near depinning
+$v = f\big(F - F_c(s)\big)$ with $f$ increasing, so a convex $v(s)$ is the
+same statement as a concave $F_c(s)$. The two curvatures have opposite
+signs, and both give the sign of $\lambda$. Physically, with $F$ pushing
+towards $+u$ and $\lambda>0$, a tilted wall advances faster and depins
+more easily.
+
+**Why measure at threshold.** In the moving phase the effective
+$\lambda$ from $v(s)$ depends on $F$: Amaral, Barabási and Stanley
+(PRL **73**, 62 (1994)) find that it diverges at depinning in the models of
+the directed-percolation class, and vanishes in the qEW ones. That is the
+criterion they use to separate the two classes. The curvature of the
+threshold, $-h_d''(0)$, is a property of the pinned state: it is finite,
+and §5.9 finds it independent of $L$.
+
 **Isotropic disorder** (`results/hd_tilt/hd_tilt.png`; $L=512$ and 1024,
 $\Delta=0.3$ and 1.0, $\kappa=20$ boxes):
 
