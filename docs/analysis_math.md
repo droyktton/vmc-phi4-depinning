@@ -709,7 +709,127 @@ coupling at depinning, with $\lambda>0$, the sign of the
 directed-percolation depinning class ($\zeta\approx0.63$). The next test is
 the roughness of the 4×1 and 8×1 walls at $s=0$ and larger $L$, with $P$
 recalibrated from their width: qKPZ predicts the local exponent to cross
-over from 1.25 to about 0.63 above a length set by $\lambda$.
+over from 1.25 to about 0.63 above a length set by $\lambda$. That test is
+§5.9.
+
+### 5.9 Weak block disorder: the qKPZ class
+
+Plan in `docs/plans/aniso_weak_qkpz.md`; figures in `results/aniso_weak/`.
+§5.8 found $\lambda>0$ for blocks elongated along the wall, but at
+$\Delta=0.3$, $L=512$ and in boxes not recalibrated for them. Here the
+disorder is weaker, so the elastic regime without overhangs is long, and
+the scaling observables are measured up to $L=8192$.
+
+**Choice of the case.** Pilot at $L=1024$ with 4×1 and 8×1 blocks and
+$\Delta\in\{0.1,0.15,0.2\}$, 10 seeds, plus a short tilt at $L=512$
+(`results/aniso_weak/pilot_*`). No wall had overhangs. The tilt curvature
+is $`h_d''/h_d \approx -3`$ to $-4$ for 4×1 and $-8$ to $-9$ for 8×1,
+roughly independent of $\Delta$, so weak disorder does not kill the
+coupling. Only 8×1 already shows a plateau $\zeta_W\approx0.7$ for
+$l\gtrsim100$ at $L=1024$. Chosen: **8×1, $\Delta=0.2$**.
+
+**Box ($\kappa$ rule).** $P(L) = 20\,\langle w\rangle(L)$, with $w$ the
+standard deviation of the single-valued profile of these walls, as in
+`data/kappa/analyze.py` (`data/aniso_weak/calib*`): $w = 3.7$, 5.7, 10.0,
+13.5, 26 for $L = 256$ to 4096, and $w\propto L^{0.7}$ to extrapolate
+to 8192. Unlike the isotropic case, $\langle h_d\rangle(L)$ is not flat for
+any $\kappa$: it falls with $L$ by slopes $-0.018$, $-0.025$, $-0.041$ (in
+$d\langle h_d\rangle/d\ln L$, relative) at $\kappa = 10$, 20, 40. All three
+fit $h_\infty + A\,L^{-1/\nu}$ with the same
+$`h_\infty \approx 0.0178`$–0.0181, so it is the ordinary finite-size
+shift of the threshold, not an effect of the box, and $\kappa=20$ was kept
+with "same $h_\infty$ for every $\kappa$" as the criterion.
+
+**Production.** $L = 256$, 512, 1024 (50 seeds) and 2048, 4096, 8192 (30
+seeds), $s=0$, `--tol 1e-5` (bisection step $6.8\times10^{-6}$; Sheppard
+correction below 0.1 %), `--dump-field`. Tilt: $L = 512$, 1024, 2048,
+$s\in\{0,\pm0.05,\pm0.1,\pm0.2,\pm0.3\}$, 30 seeds. Analysis:
+`data/aniso_weak/analyze_prod.sh`. **No wall at any $L$ has an overhang
+or a bubble** (arc length $\approx 1.02\,L$), so $u(x)$ is single-valued
+and the global $S(q)$ is usable, unlike the isotropic case.
+
+**Spread of $h_d$** (`results/aniso_weak/hd_variance/`, red stars in the
+figure; method of §5.7):
+
+| $L$ | 256 | 512 | 1024 | 2048 | 4096 | 8192 |
+|---|---|---|---|---|---|---|
+| $`\langle h_d\rangle`$ | 0.01988 | 0.01932 | 0.01860 | 0.01841 | 0.01821 | 0.01811 |
+| $`\sigma/\langle h_d\rangle`$ | 5.2 % | 4.5 % | 2.1 % | 2.2 % | 1.1 % | 0.70 % |
+
+![h_d spread vs L, with 8x1 blocks](../results/aniso_weak/hd_variance/hd_variance.png)
+
+| slope | $\chi^2$ (5 dof) |
+|---|---|
+| 0.75 (qEW) | 22.8 |
+| 0.577 (qKPZ) | 10.2 |
+| free: $1/\nu = 0.606\pm0.040$ | 9.7 (4 dof) |
+
+The free slope is $0.7\sigma$ from qKPZ and $3.6\sigma$ from qEW; the
+isotropic data give $0.88\pm0.03$ with the same machinery. The local slopes
+between successive $L$ scatter (from $-0.04$ to 1.16, each ±0.25), so the
+$\chi^2$ excess is point-to-point noise, not curvature. In the right panel
+the 8×1 points rise relative to $L^{-0.75}$, while the isotropic ones stay
+flat or fall. The threshold shift
+$`\langle h_d\rangle = h_\infty + A\,L^{-x}`$ gives $x = 0.76$
+(0.66–0.86 at $\Delta\chi^2=1$), $`h_\infty = 0.01796`$; with $x$ fixed
+at 0.577 the fit is acceptable too ($\chi^2 = 6.8/4$, $`h_\infty=0.01783`$).
+The shift therefore does not discriminate between the classes.
+
+**Roughness** (`results/aniso_weak/prod_roughness/`, estimators and bias
+of §5.6):
+
+![local zeta, L=8192](../results/aniso_weak/prod_roughness/zeta_local_L8192.png)
+
+| $l$ | 10 | 20 | 37 | 100 | 200 | 330 | 550 | 900 | 1900 | 5000 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| $\zeta_W$ chord | 1.52 | 1.31 | 1.13 | 0.86 | 0.74 | 0.66 | 0.67 | 0.65 | 0.62 | 0.66 |
+| $\zeta_W$ pca | 1.47 | 1.26 | 1.11 | 0.85 | 0.73 | 0.67 | 0.65 | 0.67 | 0.63 | 0.70 |
+
+($L=8192$.) Below $l\approx20$ the exponent is the short-scale one
+($\gtrsim1.25$, as in the isotropic walls); it falls through 1.125 at
+$\ell_\times = 35$–38 (`zW_chord` in `lo_table.dat`; $\ell_\times$ is the
+same at every $L$ from 512 to 8192); and from $l\approx300$ to 5000 it sits
+on a plateau **$\zeta_W = 0.62$–0.67**, the qKPZ value 0.63. $L = 2048$ and
+4096 give the same curve where they overlap. In the isotropic walls the
+crossing of 1.125 marks overhangs ($l_o$, §5.2) and the exponent goes to
+1; here there are none, and the exponent goes below 1 and stays there. The
+local $S(q,l)$ agrees (0.6–0.7 above $l\approx300$); the $B(r)$
+estimators (global and local) sit lower, at about 0.5 for $r\gtrsim500$,
+and have no clear plateau; this is not understood yet.
+
+**Global $S(q)$** (`results/aniso_weak/Sq/`, $q = 2\pi/l$): weighted fits
+of $`S\propto q^{-(1+2\zeta)}`$ at $L=8192$ give
+$2.27\pm0.06$ for $l = 300$–2000 ($\zeta = 0.63$; prediction 2.26) and
+$2.68\pm0.03$ for $l = 40$–300, inside the crossover. At $L=4096$ and 2048
+the long-wavelength slope is $2.39\pm0.10$ and $2.26\pm0.28$; at
+$L\le1024$ that window doesn't exist yet.
+
+**Threshold vs tilt** (`results/aniso_weak/tilt/`):
+
+![h_d vs tilt, 8x1 blocks, Delta=0.2](../results/aniso_weak/tilt/hd_tilt.png)
+
+The drop at $s=\pm0.3$ is 31–33 % and the curves at $L = 512$, 1024 and
+2048 lie on top of each other once divided by $`\langle h_d\rangle(0)`$:
+the shape of $F_c(s)$ does not depend on $L$. It is not a parabola:
+$\chi^2 = 95$, 215, 455 (6 dof), growing with the statistics. Near $s=0$,
+$`2\,[\langle h_d\rangle(s)/\langle h_d\rangle(0)-1]/s^2`$ at
+$s=\pm0.05$ and $\pm0.1$ gives $h_d''/h_d \approx -13$ to $-16$, i.e.
+$\lambda/h_d\approx 14$. Beyond $\lvert s\rvert\approx0.1$ the decrease is
+nearly linear in $\lvert s\rvert$. The global parabola (drawn) understates
+the curvature at $s=0$, which is why it overshoots 1 there. $\lambda$
+neither grows nor saturates with $L$ visibly: it is $L$-independent
+within the errors.
+
+**Conclusion.** With weak disorder correlated along the wall, four
+independent observables agree with the qKPZ (directed-percolation)
+depinning class and not with qEW: $\zeta_W = 0.62$–0.67 over more than a
+decade of $l$; $S(q)\propto q^{-2.27}$; $1/\nu = 0.61\pm0.04$; and a
+finite, $L$-independent $\lambda>0$. The crossover from the short-scale
+regime happens at $\ell_\times\approx 35$–40, much shorter than the
+overhang length of the isotropic walls at this $\Delta$, and no overhangs
+form. In the isotropic medium the same observables give qEW (§5.6–5.8):
+the class is selected by the anisotropy of the disorder, not by the
+$\phi^4$ model.
 
 ## 6. Two-crossover model for $\zeta_W(l)$
 
