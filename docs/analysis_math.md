@@ -785,8 +785,8 @@ of §5.6):
 | $\zeta_W$ chord | 1.52 | 1.31 | 1.13 | 0.86 | 0.74 | 0.66 | 0.67 | 0.65 | 0.62 | 0.66 |
 | $\zeta_W$ pca | 1.47 | 1.26 | 1.11 | 0.85 | 0.73 | 0.67 | 0.65 | 0.67 | 0.63 | 0.70 |
 
-($L=8192$.) Below $l\approx20$ the exponent is the short-scale one
-($\gtrsim1.25$, as in the isotropic walls); it falls through 1.125 at
+($L=8192$.) Below $l\approx20$ the exponent is the Larkin one
+(1.5, as at small scales in the isotropic walls); it falls through 1.125 at
 $\ell_\times = 35$–38 (`zW_chord` in `lo_table.dat`; $\ell_\times$ is the
 same at every $L$ from 512 to 8192); and from $l\approx300$ to 5000 it sits
 on a plateau **$\zeta_W = 0.62$–0.67**, the qKPZ value 0.63. $L = 2048$ and
@@ -809,19 +809,26 @@ All $L$ fall on one curve, and it has three regimes:
 
 | regime | window in $l$ | $1+2\zeta$ ($L=8192$) | $\zeta$ | range over $L$ |
 |---|---|---|---|---|
-| short scales | 2–6 | $0.93\pm0.01$ | ≈ 0 | 0.93–1.04 |
-| intermediate | 15–40 | $3.70\pm0.04$ | 1.35 | 3.56–3.92 |
-| long scales | 300–2000 | $2.27\pm0.07$ | 0.63 | 2.39 ± 0.13 at $L=4096$ |
+| non-universal | 2–6 | $0.93\pm0.01$ | ≈ 0 | 0.93–1.04 |
+| Larkin | 15–40 | $3.70\pm0.04$ | 1.35 (cut short; $\zeta_L=1.5$) | 3.56–3.92 |
+| qKPZ | 300–2000 | $2.27\pm0.07$ | 0.63 | 2.39 ± 0.13 at $L=4096$ |
 
 - **$l\lesssim8$:** $S\propto q^{-1}$, a nearly flat profile below the
   block length $AX=8$, with a dip of the slope at $l\approx6$–8. It is set
   by the block shape and by the lattice: it is not universal.
-- **$l\approx15$–40:** the steepest part, with local slopes up to 3.7–3.9
-  at $l\approx20$–30. That lies between qEW (3.5) and Larkin (4), and
-  matches $\zeta_W\approx1.3$–1.5 at the same $l$ in the table above. It
-  is not a clean plateau, because the slope starts falling right after its
-  maximum. It is the qEW (or Larkin–qEW) regime of the isotropic walls,
-  cut short by $\ell_\times\approx35$.
+- **$l\approx15$–40: Larkin.** The steepest part, with local slopes up
+  to 3.7–3.9 at $l\approx20$–30. The Larkin value is 4 ($\zeta_L=3/2$),
+  but in a window this short and cut on both sides (by the non-universal
+  regime below $l\approx8$, by the crossover to qKPZ above
+  $\ell_\times\approx35$), the effective slope stays below the plateau.
+  $\zeta_W$ agrees: 1.47–1.58 at $l\lesssim10$, and from there it falls
+  without pausing at 1.25. There is no qEW window. The isotropic scales
+  of §6 explain why: at $\Delta=0.2$, $l_o\approx102\,\Delta^{-2.1}\approx3000$
+  and $l_o/L_c\approx5\,\Delta^{-1.43}\approx50$ give $L_c\approx60$, already
+  above $\ell_\times$. So the KPZ term takes over before the Larkin regime
+  ends, and the wall goes directly from Larkin to qKPZ. ($L_c$ is the
+  isotropic estimate; the 8×1 blocks change the disorder correlator, so
+  it is only an order of magnitude.)
 - **$l\gtrsim100$:** the slope decreases through the crossover
   (2.7 at $l\approx100$) to the qKPZ value. In $q^{2.26}S$ (left panel)
   it is flat from $q\approx0.05$ ($l\approx120$) down to the smallest
@@ -848,7 +855,7 @@ within the errors.
 independent observables agree with the qKPZ (directed-percolation)
 depinning class and not with qEW: $\zeta_W = 0.62$–0.67 over more than a
 decade of $l$; $S(q)\propto q^{-2.27}$; $1/\nu = 0.61\pm0.04$; and a
-finite, $L$-independent $\lambda>0$. The crossover from the short-scale
+finite, $L$-independent $\lambda>0$. The crossover from the Larkin
 regime happens at $\ell_\times\approx 35$–40, much shorter than the
 overhang length of the isotropic walls at this $\Delta$, and no overhangs
 form. In the isotropic medium the same observables give qEW (§5.6–5.8):
