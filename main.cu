@@ -46,6 +46,19 @@
 // h_d versus m/Lx measures the tilt dependence of the threshold (a
 // nonzero curvature is the qKPZ coupling at depinning).
 //
+// Bubble: with --bubble R0 the box is periodic in x and y (L x L) and the
+// initial state is a disk of the +1 phase, radius R0, centred in the box:
+// a closed domain wall, with the Laplace pressure of its curvature
+// (sigma/R per unit area, sigma ~ 0.94 for c = eps0 = 1, against 2h from
+// the field, so R0 must stay well above sigma/2h_d). The domain has
+// escaped once some site beyond --escape-radius Re (default 0.4 L) from
+// the centre flips. Every trial starts from the disk (no warm starts: the
+// disk shrinks where the pinning is weak, so it is not below the pinned
+// states and the warm-start argument above does not apply; --warm turns
+// them back on). A trial in which the domain vanishes is reported as
+// "collapsed" and counts as pinned. The critical field is h_d of the
+// disk, and the critical configuration is a pinned closed wall.
+//
 // Around h_d, scan_magnetization_jumps() additionally records the
 // metastable-state sequence (magnetization jumps / "avalanches") on a
 // finer field grid. This scan probes 100 fields all within 5% of h_d,
@@ -82,9 +95,10 @@ bool depins(System *sys, float h, const char *stage)
 	int sweeps=sys->find_next_metastable(CHOP,true);
 	bool escaped=sys->escaped();
 	bool capped=!escaped && !sys->converged();
+	bool collapsed=sys->get_bubble() && !escaped && sys->collapsed();
 	if(capped && sys->get_tolres()>0) escaped=true;
 	double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
-	std::cout << stage << " h=" << h << (escaped ? " depinned" : " pinned") << (capped ? " (still moving at the cap)" : "")
+	std::cout << stage << " h=" << h << (escaped ? " depinned" : (collapsed ? " collapsed" : " pinned")) << (capped ? " (still moving at the cap)" : "")
 		<< " sweeps=" << sweeps << " time=" << seconds << "s";
 	if(sys->get_use_tiles()) std::cout << " tile_work=" << sys->tile_work()-work0 << " sweeps";
 	std::cout << std::endl;
@@ -153,6 +167,13 @@ float find_depinning_field(float h_low, float h_high, float tol, System *sys, bo
 	char filename[100];
 	int Lx=sys->get_L(), Ly=sys->get_Ly();
 
+	if(sys->get_bubble()){
+		thrust::pair<float,float> rr=sys->wall_radii();
+		std::cout << "wall radii: min=" << rr.first << " max=" << rr.second << " escape radius=" << sys->get_bubble_Re() << std::endl;
+		if(sys->collapsed()) std::cout << "WARNING: the critical domain has collapsed" << std::endl;
+		if(sys->get_bubble_Re()-rr.second<WALL_MARGIN)
+			std::cout << "WARNING: critical wall within " << WALL_MARGIN << " sites of the escape radius: possibly censored" << std::endl;
+	}
 	// how close the critical wall gets to where it would be cut off
 	thrust::pair<int,int> rows=sys->wall_rows();
 	int limit = sys->get_escape_full() ? Ly-1 : sys->get_escape_row();
@@ -222,6 +243,7 @@ int main(int argc, char **argv)
 	bool with_magjumps=false, dump_field=false, verify_cold=false, bad_flag=false;
 	float tolres=-1, tile_eps=-1, ly_k=-1;
 	int Ly=-1, path=-1, headroom=-1, y0=Y0_DEFAULT, tilt=0;
+	float bubble_R0=-1, bubble_Re=-1; bool warm=false;
 	std::string relax_from;
 	bool no_warm=false, no_tiles=false;
 	for(int i=6;i<argc;i++){
@@ -240,11 +262,17 @@ int main(int argc, char **argv)
 		else if(flag=="--headroom" && i+1<argc) headroom=atoi(argv[++i]);
 		else if(flag=="--y0" && i+1<argc) y0=atoi(argv[++i]);
 		else if(flag=="--tilt" && i+1<argc) tilt=atoi(argv[++i]);
+		else if(flag=="--bubble" && i+1<argc) bubble_R0=atof(argv[++i]);
+		else if(flag=="--escape-radius" && i+1<argc) bubble_Re=atof(argv[++i]);
+		else if(flag=="--warm") warm=true;
 		else bad_flag=true;
 	}
 	// --path and --headroom go together, and replace --ly/--ly-k
 	if((path>0)!=(headroom>0) || (path>0 && (Ly>0 || ly_k>0))) bad_flag=true;
 	if(tilt!=0 && path<=0) bad_flag=true;
+	// --bubble replaces the straight-wall geometry options
+	if(bubble_R0>0 && (path>0 || Ly>0 || ly_k>0 || tilt!=0)) bad_flag=true;
+	if(bubble_Re>0 && bubble_R0<=0) bad_flag=true;
 	if(argc>=6 && !bad_flag){
 		L=atoi(argv[1]);
 		h_low=atof(argv[2]);
@@ -275,6 +303,8 @@ int main(int argc, char **argv)
 		std::cout << "                  all of row Y+P has flipped, Ly = Y+P+H rounded up to a multiple of 32" << std::endl;
 		std::cout << "  --tilt m        (with --path) helical BC phi(x+L,y)=phi(x,y-m): mean wall slope m/L (m even);" << std::endl;
 		std::cout << "                  Ly = Y+P+|m|+H" << std::endl;
+		std::cout << "  --bubble R0     instead: periodic L x L box, initial disk of radius R0 (closed wall); escaped once" << std::endl;
+		std::cout << "                  some site beyond --escape-radius Re (default 0.4 L) flips; no warm starts (--warm: on)" << std::endl;
 		std::cout << "  --tolres x      convergence cutoff on max|dphi/dt| (default " << TOLRES << "; 0: legacy mean-velocity criterion)" << std::endl;
 		std::cout << "example: " << argv[0] << " 256 0.0 0.1 0.0001 1234" << std::endl;
 		return 1;
@@ -289,10 +319,17 @@ int main(int argc, char **argv)
 	}
 	System sys(L,Ly,disorder_seed);
 	if(path>0) sys.set_geometry(y0,y0+path,true);
+	if(bubble_R0>0){
+		if(bubble_Re<=0) bubble_Re=0.4f*L;
+		if(bubble_R0>=bubble_Re || bubble_Re>0.5f*L){ std::cerr << "ERROR: need R0 < Re <= L/2" << std::endl; return 1; }
+		sys.set_bubble(bubble_R0,bubble_Re);
+		if(!warm) no_warm=true;
+	}
 	if(tilt!=0) sys.set_tilt(tilt);
 	std::cout << "Lx=" << L << " Ly=" << Ly << " start=" << sys.get_y_start() << " escape_row=" << sys.get_escape_row()
 		<< " criterion=" << (sys.get_escape_full() ? "whole row" : "any site");
 	if(tilt!=0) std::cout << " tilt=" << tilt << " (slope " << double(tilt)/L << ")";
+	if(bubble_R0>0) std::cout << " bubble R0=" << bubble_R0 << " Re=" << bubble_Re << (no_warm ? " (no warm starts)" : "");
 	if(AX!=1 || AY!=1) std::cout << " disorder blocks " << AX << "x" << AY;
 	std::cout << std::endl;
 	if(tolres>=0) sys.set_tolres(tolres);

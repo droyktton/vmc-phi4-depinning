@@ -39,6 +39,11 @@
 
 typedef float REAL;
 
+// y boundary: anti-periodic (1, default: a single wall spans the sample) or
+// periodic (0, bubble geometry: a closed domain wall around a disk, see
+// System::set_bubble). Read by the update kernels from constant memory.
+__constant__ int d_antiperiodic_y = 1;
+
 // model parameters (paper sets eps0=c=1 without loss of generality)
 #ifndef AMPDIS
 #define AMPDIS	0.2	// disorder strength Delta
@@ -202,8 +207,8 @@ struct velocityop
 		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
 		// wall spans the sample. The neighbor across the seam is "up"
 		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1.
-		if(y==0) phi_up*=-1;
-		if(y==Ly-1) phi_down*=-1;
+		if(d_antiperiodic_y && y==0) phi_up*=-1;
+		if(d_antiperiodic_y && y==Ly-1) phi_down*=-1;
 
 		float laplacian = phi_up+phi_down+phi_right+phi_left-4.0*phi_center;
 		float r = site_disorder(x, y, Lx, disorder_seed);
@@ -282,8 +287,8 @@ struct vmcop
 		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
 		// wall spans the sample. The neighbor across the seam is "up"
 		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1.
-		if(y==0) phi_up*=-1;
-		if(y==Ly-1) phi_down*=-1;
+		if(d_antiperiodic_y && y==0) phi_up*=-1;
+		if(d_antiperiodic_y && y==Ly-1) phi_down*=-1;
 
 		phi[center]=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
 			site_disorder(x, y, Lx, disorder_seed),external_field);
@@ -327,8 +332,8 @@ void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, float external_field
 	float phi_center=phi[center];
 
 	// anti-periodic BC in y (see velocityop)
-	if(y==0) phi_up*=-1;
-	if(y==Ly-1) phi_down*=-1;
+	if(d_antiperiodic_y && y==0) phi_up*=-1;
+	if(d_antiperiodic_y && y==Ly-1) phi_down*=-1;
 
 	float new_phi=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
 		site_disorder(x, y, Lx, disorder_seed),external_field);
@@ -425,6 +430,47 @@ struct is_positive
 	bool operator()(float x){ return x > 0; }
 };
 
+// initial circular domain: phi=+1 inside the disk of radius R centred at
+// (cx, cy), -1 outside (bubble geometry)
+struct disk
+{
+	int Lx; float cx, cy, R;
+	disk(int _Lx, float _cx, float _cy, float _R):Lx(_Lx),cx(_cx),cy(_cy),R(_R){};
+	__host__ __device__
+	float operator()(int i){
+		float dx=i%Lx-cx, dy=i/Lx-cy;
+		return dx*dx+dy*dy < R*R ? 1.0f : -1.0f;
+	}
+};
+
+// phi at site i if it lies farther than R from (cx, cy), else -10: the max
+// over sites is > 0 once the domain has reached that radius somewhere
+struct phi_beyond_radius
+{
+	const float *phi; int Lx; float cx, cy, R;
+	phi_beyond_radius(const float *_phi, int _Lx, float _cx, float _cy, float _R):phi(_phi),Lx(_Lx),cx(_cx),cy(_cy),R(_R){};
+	__device__
+	float operator()(int i){
+		float dx=i%Lx-cx, dy=i/Lx-cy;
+		return dx*dx+dy*dy > R*R ? phi[i] : -10.0f;
+	}
+};
+
+// distance of site i from (cx, cy) if it is a wall site (phi changes sign
+// to its right or below), else -1 (for max) / big (for min)
+struct wall_radius
+{
+	const float *phi; int Lx, Ly; float cx, cy, fill;
+	wall_radius(const float *_phi, int _Lx, int _Ly, float _cx, float _cy, float _fill):phi(_phi),Lx(_Lx),Ly(_Ly),cx(_cx),cy(_cy),fill(_fill){};
+	__device__
+	float operator()(int i){
+		int x=i%Lx, y=i/Lx;
+		float p=phi[i], pr=phi[(x+1)%Lx+Lx*y], pd=phi[x+Lx*((y+1)%Ly)];
+		if(p*pr<0 || p*pd<0){ float dx=x-cx, dy=y-cy; return sqrtf(dx*dx+dy*dy); }
+		return fill;
+	}
+};
+
 // initial straight wall y = y_low + tilt*x/Lx (phi=+1 below, -1 above)
 struct tilted_wall
 {
@@ -475,6 +521,11 @@ class System{
 		// there, with a rough front, still clears it)
 		int y_start, escape_row;
 		bool escape_full;
+		// bubble geometry (set_bubble): periodic in x and y, the initial state
+		// is a disk of radius bubble_R0 centred in the box, and the domain
+		// has escaped once some site beyond bubble_Re from the centre flips
+		bool bubble;
+		float bubble_R0, bubble_Re;
 
 	public:
 		unsigned long disorder_seed;
@@ -518,6 +569,7 @@ class System{
 			y_start=int(Ly*0.2);
 			escape_row=int(0.95f*Ly);
 			escape_full=false;
+			bubble=false; bubble_R0=0; bubble_Re=0;
 			disorder_seed=_disorder_seed;
 
 			reset_uniform();
@@ -549,6 +601,11 @@ class System{
 		// if tilt<0, so that its lowest row is y_level)
 		void set_flat_interface(int y_level)
 		{
+			if(bubble){
+				thrust::transform(thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2),
+					d_phi, disk(Lx, 0.5f*Lx, 0.5f*Ly, bubble_R0));
+				return;
+			}
 			if(tilt==0){
 				int split=y_level*Lx;
 				thrust::fill(d_phi, d_phi+split, 1);
@@ -575,6 +632,30 @@ class System{
 			log << "tilt= " << tilt << std::endl;
 		}
 		int get_tilt(){ return tilt; }
+		// bubble geometry: periodic y boundary, disk of the given radius as
+		// the initial state (set_flat_interface), escape beyond escape_radius
+		void set_bubble(float radius, float escape_radius)
+		{
+			bubble=true; bubble_R0=radius; bubble_Re=escape_radius;
+			int zero=0;
+			cudaMemcpyToSymbol(d_antiperiodic_y, &zero, sizeof(int));
+			std::ofstream log("logfile.dat",std::ios::app);
+			log << "bubble_R0= " << bubble_R0 << std::endl << "bubble_Re= " << bubble_Re << std::endl;
+		}
+		bool get_bubble(){ return bubble; }
+		float get_bubble_Re(){ return bubble_Re; }
+		// the domain has disappeared (no phi>0 left)
+		bool collapsed(){ return thrust::reduce(d_phi,d_phi+L2,float(-10.),thrust::maximum<float>())<0; }
+		// (min, max) distance of the wall sites from the centre
+		thrust::pair<float,float> wall_radii()
+		{
+			float cx=0.5f*Lx, cy=0.5f*Ly;
+			float rmin=thrust::transform_reduce(thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2),
+				wall_radius(phi_ptr,Lx,Ly,cx,cy,1e9f), 1e9f, thrust::minimum<float>());
+			float rmax=thrust::transform_reduce(thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2),
+				wall_radius(phi_ptr,Lx,Ly,cx,cy,-1.f), -1.f, thrust::maximum<float>());
+			return thrust::make_pair(rmin,rmax);
+		}
 		int get_y_start(){ return y_start; }
 		int get_escape_row(){ return escape_row; }
 		bool get_escape_full(){ return escape_full; }
@@ -733,6 +814,8 @@ class System{
 
 		// has the interface escaped (see escape_row)?
 		bool escaped(){
+			if(bubble) return thrust::transform_reduce(thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2),
+				phi_beyond_radius(phi_ptr,Lx,0.5f*Lx,0.5f*Ly,bubble_Re), -10.f, thrust::maximum<float>())>0;
 			if(!escape_full) return row_max(escape_row)>0;
 			return row_min(escape_row)>0 || row_min((escape_row+Ly)/2)>0;
 		}
