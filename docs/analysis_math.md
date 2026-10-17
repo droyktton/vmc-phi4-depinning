@@ -764,7 +764,7 @@ recalibrated from their width: qKPZ predicts the local exponent to cross
 over from 1.25 to about 0.63 above a length set by $\lambda$. That test is
 §5.9.
 
-### 5.9 Weak block disorder: the qKPZ class
+### 5.9 Weak block disorder: qKPZ geometry
 
 Plan in `docs/plans/aniso_weak_qkpz.md`; figures in `results/aniso_weak/`.
 §5.8 found $\lambda>0$ for blocks elongated along the wall, but at
@@ -800,32 +800,59 @@ $s\in\{0,\pm0.05,\pm0.1,\pm0.2,\pm0.3\}$, 30 seeds. Analysis:
 or a bubble** (arc length $\approx 1.02\,L$), so $u(x)$ is single-valued
 and the global $S(q)$ is usable, unlike the isotropic case.
 
-**Spread of $h_d$** (`results/aniso_weak/hd_variance/`, red stars in the
-figure; method of §5.7):
+**Spread and shift of $h_d$** (`results/aniso_weak/hd_variance/`; method
+of §5.7). 200 seeds per $L$: the production seeds plus
+`data/aniso_weak/seeds/` (same boxes, no field dumps), merged in
+`data/aniso_weak/merged_hd/`.
 
 | $L$ | 256 | 512 | 1024 | 2048 | 4096 | 8192 |
 |---|---|---|---|---|---|---|
-| $`\langle h_d\rangle`$ | 0.01988 | 0.01932 | 0.01860 | 0.01841 | 0.01821 | 0.01811 |
-| $`\sigma/\langle h_d\rangle`$ | 5.2 % | 4.5 % | 2.1 % | 2.2 % | 1.1 % | 0.70 % |
+| $`\langle h_d\rangle`$ | 0.01994 | 0.01910 | 0.01866 | 0.01839 | 0.01822 | 0.01810 |
+| $`\sigma/\langle h_d\rangle`$ | 6.8 % | 3.9 % | 2.6 % | 1.8 % | 1.1 % | 0.64 % |
 
 ![h_d spread vs L, with 8x1 blocks](../results/aniso_weak/hd_variance/hd_variance.png)
 
-| slope | $\chi^2$ (5 dof) |
-|---|---|
-| 0.75 (qEW) | 22.8 |
-| 0.577 (qKPZ) | 10.2 |
-| free: $1/\nu = 0.606\pm0.040$ | 9.7 (4 dof) |
+![shift and spread of h_d, separately](../results/aniso_weak/hd_variance/shift_sigma.png)
 
-The free slope is $0.7\sigma$ from qKPZ and $3.6\sigma$ from qEW; the
-isotropic data give $0.88\pm0.03$ with the same machinery. The local slopes
-between successive $L$ scatter (from $-0.04$ to 1.16, each ±0.25), so the
-$\chi^2$ excess is point-to-point noise, not curvature. In the right panel
-the 8×1 points rise relative to $L^{-0.75}$, while the isotropic ones stay
-flat or fall. The threshold shift
-$`\langle h_d\rangle = h_\infty + A\,L^{-x}`$ gives $x = 0.76$
-(0.66–0.86 at $\Delta\chi^2=1$), $`h_\infty = 0.01796`$; with $x$ fixed
-at 0.577 the fit is acceptable too ($\chi^2 = 6.8/4$, $`h_\infty=0.01783`$).
-The shift therefore does not discriminate between the classes.
+Fits (`data/aniso_weak/kappa_sens/joint_fit.py`), $\sigma\sim L^{-x}$,
+$`\langle h_d\rangle = h_\infty + A\,L^{-x}`$, and both with one $x$:
+
+| | free $x$ | $\chi^2$, $x=0.577$ (qKPZ) | $\chi^2$, $x=0.75$ (qEW) |
+|---|---|---|---|
+| $\sigma$ | $0.685\pm0.020$ ($\chi^2$ 4.8/4) | 34.4/5 | 16.5/5 |
+| shift | 0.686 (0.63–0.74) ($\chi^2$ 2.3/3) | 6.3/4 | 3.7/4 |
+| joint, all $L$ | $0.685\pm0.018$ ($\chi^2$ 7.0/8) | 40.7/9 | 20.2/9 |
+| joint, $L\ge1024$ | $0.690\pm0.031$ ($\chi^2$ 4.2/4) | 17.1/5 | 7.9/5 |
+
+With 30–50 seeds per $L$ the spread gave $0.606\pm0.040$; that was noise.
+The slopes between successive $L$ are 0.85, 0.63, 0.54, 0.74, 0.78
+(±0.10–0.14). The isotropic data give $0.88\pm0.03$ with the same
+machinery.
+
+- **The box does not explain it.** The real $\kappa_{\rm eff} = P/\langle w\rangle$,
+  with $w$ from the production fields, is 19.6, 18.4, 20.3, 20.0, 21.4, 24.9
+  for $L=256$–8192, and at $L=2048$
+  $d\ln\sigma/d\ln\kappa = -0.16\pm0.13$ ($\kappa = 10$, 20, 40). Correcting
+  $\sigma$ to $\kappa=20$ gives $0.671\pm0.021$
+  (`data/aniso_weak/kappa_sens/analyze.py`).
+- **The bias is the extreme-value one.** At $\kappa\gg\kappa^*$ the threshold
+  is approached from above with an amplitude growing like $(\ln\kappa)^{1/\delta}$
+  and the same exponent as $\sigma$ (Kolton, Bustingorry, Ferrero, Rosso,
+  J. Stat. Mech. (2013), arXiv:1308.4329): here $A>0$, the shift between
+  $L=256$ and 2048 is $6.3\times10^{-4}$, $1.5\times10^{-3}$, $1.8\times10^{-3}$
+  at $\kappa = 10$, 20, 40, and shift and spread give the same $x$.
+- **The KPZ slope term is small.** With $\lambda>0$ the long modes missing at
+  small $L$ would raise $h_d$ by $(\lambda/2)\Delta\langle(\nabla u)^2\rangle$, a
+  bias $\propto L^{-(2-2\zeta)}$ (Krug, Meakin, J. Phys. A **23**, L987 (1990),
+  for the velocity). Measured on the critical walls
+  (`data/aniso_weak/kappa_sens/slope_bias.py`), it predicts 4–8 times less
+  than the observed shift, and per sample $dh_d/d\langle(\nabla u)^2_{l\ge64}\rangle
+  \approx -0.01\pm0.01$ instead of $-\lambda/2\approx-0.13$ ($|r|\le0.25$).
+  It does not contaminate $\sigma$.
+
+So the threshold scales with $1/\nu = 0.685\pm0.02$ at $L\le8192$, between
+qKPZ (0.577, $6\sigma$) and qEW (0.75, $3.5\sigma$), while the geometry of
+the wall below is that of qKPZ.
 
 **Roughness** (`results/aniso_weak/prod_roughness/`, estimators and bias
 of §5.6):
@@ -903,16 +930,19 @@ the curvature at $s=0$, which is why it overshoots 1 there. $\lambda$
 neither grows nor saturates with $L$ visibly: it is $L$-independent
 within the errors.
 
-**Conclusion.** With weak disorder correlated along the wall, four
-independent observables agree with the qKPZ (directed-percolation)
-depinning class and not with qEW: $\zeta_W = 0.62$–0.67 over more than a
-decade of $l$; $S(q)\propto q^{-2.27}$; $1/\nu = 0.61\pm0.04$; and a
-finite, $L$-independent $\lambda>0$. The crossover from the Larkin
-regime happens at $\ell_\times\approx 35$–40, much shorter than the
-overhang length of the isotropic walls at this $\Delta$, and no overhangs
-form. In the isotropic medium the same observables give qEW (§5.6–5.8):
-the class is selected by the anisotropy of the disorder, not by the
-$\phi^4$ model.
+**Conclusion.** With weak disorder correlated along the wall, the
+geometry of the critical wall is that of the qKPZ (directed-percolation)
+class and not qEW: $\zeta_W = 0.62$–0.67 over more than a decade of $l$,
+$S(q)\propto q^{-2.27}$, and a finite, $L$-independent $\lambda>0$. The
+crossover from the Larkin regime happens at $\ell_\times\approx 35$–40,
+much shorter than the overhang length of the isotropic walls at this
+$\Delta$, and no overhangs form. In the isotropic medium the same
+observables give qEW (§5.6–5.8): the anisotropy of the disorder selects
+the class, not the $\phi^4$ model. The finite-size scaling of the
+threshold does not follow: shift and spread of $h_d$ both give
+$1/\nu = 0.685\pm0.02$, far from 0.577. Open: whether this is a
+pre-asymptotic value (the $\zeta_W$ plateau only starts at $l\approx300$)
+or the threshold statistics are set at shorter scales than the geometry.
 
 ## 6. Two-crossover model for $\zeta_W(l)$
 
