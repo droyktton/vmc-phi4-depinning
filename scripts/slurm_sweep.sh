@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SLURM job array version of sweep_disorder.sh: one array task (one GPU)
-# per (L, Delta) pair, each running run_batch.py --dump-field into
+# per (L, Delta) pair, each running run_batch.py --dump-field (unless DUMP=) into
 # $OUTROOT/L<L>_D<Delta>/. Like sweep_disorder.sh, seeds already listed
 # in hd_summary.csv are skipped, so resubmitting resumes a cut run.
 #
@@ -38,6 +38,7 @@ HEADROOM=${HEADROOM:-}  # Ly = 32+PATHLEN+HEADROOM (see ./phi4vmc --help)
 ADAPT=${ADAPT:-}        # if set (with PATHLEN): double a sample's headroom while its wall nears Ly
 TILT=${TILT:-}          # if set (with PATHLEN): helical BC, mean wall slope TILT/L
 TOL=${TOL:-1e-4}
+DUMP=${DUMP-1}          # set empty (DUMP=) to skip --dump-field
 OUTROOT=${OUTROOT:-data/sweep}
 BIN=${BIN:-./phi4vmc_D}    # binary prefix: runs ${BIN}<Delta>
 
@@ -56,4 +57,4 @@ HHIGH=${HHIGH:-$(python3 -c "print(1.15*$HEST)")}
 echo "=== $(hostname) GPU=${CUDA_VISIBLE_DEVICES:-?} Delta=$D L=$L LYK=${LYK:-square} PATHLEN=${PATHLEN:--} HEADROOM=${HEADROOM:--} h in [$HLOW, $HHIGH] ==="
 python3 -u scripts/run_batch.py --binary "${BIN}$D" --L "$L" \
     --h-low "$HLOW" --h-high "$HHIGH" --tol "$TOL" --nsamples "$NSAMPLES" --seed-start "$SEED_START" \
-    ${LYK:+--ly-k "$LYK"} ${PATHLEN:+--path "$PATHLEN" --headroom "$HEADROOM"} ${ADAPT:+--adapt-headroom} ${TILT:+--tilt "$TILT"} --dump-field --outdir "$OUTROOT/L${L}_D${D}"
+    ${LYK:+--ly-k "$LYK"} ${PATHLEN:+--path "$PATHLEN" --headroom "$HEADROOM"} ${ADAPT:+--adapt-headroom} ${TILT:+--tilt "$TILT"} ${DUMP:+--dump-field} --outdir "$OUTROOT/L${L}_D${D}"
