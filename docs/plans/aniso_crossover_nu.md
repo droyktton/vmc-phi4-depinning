@@ -84,6 +84,8 @@ This way seeds 31–200 can run without field dumps, as in `data/aniso_weak/seed
 - **Statistics:** the error on σ with N = 200 is ≈ 5 %. A free slope over L = 256–2048 then has an error of
   ≈ 0.03, enough to separate 0.58 from 0.69 from 0.75. If the slopes between successive L are needed at
   ±0.05, use 800 seeds at L = 256 and 512 (they are cheap).
+- **Control:** isotropic disorder (1×1) at the same Δ = 0.2, L and seeds, with P = 0.8 × the κ = 25 boxes of
+  `data/kappa`. The existing isotropic Δ = 0.2 runs have only 30 seeds and `--tol 1e-4`.
 - **Optional:** 16×1 at L = 4096 (30 + 170 seeds), if stage 4 points to a trend.
 
 ## Stage 4 — Analysis (cpu queue, never on the frontend)
