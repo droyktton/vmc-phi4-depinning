@@ -4,7 +4,7 @@ For qEW depinning in 1+1, sigma(h_d) ~ L^(-1/nu) with 1/nu = 2 - zeta = 0.75
 (zeta_q = 1.25), if the box keeps the finite-size regime fixed (kappa fixed).
 Reads data/kappa/L*_D*_kap* (kappa 15/25/40, tol 1e-4) and the kappa=20
 production data/prod_kappa20/L*_D* (tol 1e-5), both isotropic disorder, and
-the weak 8x1 block disorder run data/aniso_weak/merged/ax8ay1_L*_D0.2_m0
+the weak 8x1 block disorder runs data/aniso_weak/merged_hd/ax8ay1_L*_D0.2_m0 (200 seeds)
 (kappa=20, tol 1e-5; docs/plans/aniso_weak_qkpz.md), for which the qKPZ
 class predicts 1/nu = 0.577. Also: local slopes of sigma between successive
 L, and the threshold shift <h_d>(L) = h_inf + A L^(-1/nu).
@@ -52,7 +52,7 @@ for d in glob.glob('data/prod_kappa20/L*_D*'):
     if m:
         L, D = int(m.group(1)), float(m.group(2))
         sets.append(('iso', D, 20, L, d, step(*prod_bracket[D], 1e-5)))
-for d in glob.glob('data/aniso_weak/merged/ax8ay1_L*_D0.2_m0'):  # data/aniso_weak/prod/run.sh
+for d in glob.glob('data/aniso_weak/merged_hd/ax8ay1_L*_D0.2_m0'):  # data/aniso_weak/{prod,seeds}/run.sh
     sets.append(('8x1', 0.2, 20, int(re.search(r'_L(\d+)_', d).group(1)), d, step(0.012, 0.026, 1e-5)))
 
 rows = []
