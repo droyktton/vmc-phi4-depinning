@@ -116,3 +116,10 @@ This way seeds 31–200 can run without field dumps, as in `data/aniso_weak/seed
 - **Changed:**
   - `scripts/slurm_sweep.sh`: the `DUMP` switch;
   - `scripts/hd_variance.py` and `joint_fit.py`: the `ax*ay1` glob and the plot against L/ℓ_p.
+
+## Outcome (2026-10-21)
+Done; documented in §5.10 of `docs/analysis_math.md` (figures in `results/aniso_nu/`). Joint 1/ν over
+L = 256–2048, 200 seeds per L: 1×1 0.80 (qEW-compatible control), 4×1 0.66, 8×1 0.67, 16×1 0.73, with
+ℓ_p = —, 270 ± 170, 130 ± 20, 93 ± 10. The second case of "Reading the outcome" applies: 16×1 has the
+shortest ℓ_p and is the farthest from 0.577, and the local slopes do not collapse on L/ℓ_p. The threshold
+exponent is not set by the geometric crossover.

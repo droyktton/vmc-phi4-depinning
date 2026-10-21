@@ -994,6 +994,112 @@ threshold does not follow: shift and spread of $h_d$ both give
 $1/\nu = 0.685\pm0.02$, far from 0.577. Open: whether this is a
 pre-asymptotic value (the $\zeta_W$ plateau only starts at $l\approx300$)
 or the threshold statistics are set at shorter scales than the geometry.
+§5.10 tests the first option and rules it out.
+
+### 5.10 Does the crossover length set the threshold exponent?
+
+Plan in `docs/plans/aniso_crossover_nu.md`; figures in `results/aniso_nu/`.
+
+**Hypothesis.** The $1/\nu = 0.685$ of §5.9 is pre-asymptotic: the
+$\zeta_W$ plateau starts at $\ell_p\approx130$–300, and a global quantity
+like $\sigma(h_d)$ needs $L/\ell_p$ larger than we reach. Larger $L$ is
+expensive, so we move $\ell_p$ instead. If $1/\nu_\text{eff}$ depends only
+on $L/\ell_p$, block shapes with different $\ell_p$ must give the same
+function of $L/\ell_p$. The aspect ratio of the blocks is the strong
+knob: the tilt curvature near $s=0$ ($\lvert s\rvert\le0.1$, $L=512$ and
+1024) is $h_d''/h_d\approx-4$ for 4×1, $-13$ to $-16$ for 8×1 and
+$-36\pm2.5$ for 16×1, so $\lambda$ grows with the elongation and $\ell_p$
+shrinks.
+
+**Runs.** $\Delta=0.2$, blocks 4×1, 16×1 and, as control, isotropic
+disorder (1×1) at the same $\Delta$; the 8×1 data are those of §5.9.
+$L = 256$, 512, 1024, 2048 with 200 seeds per $L$ (fields dumped for seeds
+1–30), `--tol 1e-5`, $s=0$. Boxes by the $\kappa=20$ rule, recalibrated
+for each shape from $w(L)$ with 10 seeds (`data/aniso_nu/calib_ax*`); for
+1×1, $0.8\times$ the $\kappa=25$ boxes of `data/kappa`:
+
+| blocks | $P$ at $L=256$, 512, 1024, 2048 | $\kappa_\text{eff}=P/\langle w\rangle$ |
+|---|---|---|
+| 1×1 | 88, 210, 498, 1185 | 19–21 |
+| 4×1 | 85, 147, 261, 547 | 15–22 |
+| 8×1 | 74, 113, 200, 271 | 18–20 |
+| 16×1 | 55, 86, 130, 219 | 21–23 |
+
+Scripts (cluster, not versioned): `data/aniso_nu/prod/run.sh` with
+`tasks.txt` (one line per task: shape, $L$, seeds, $P$, $H$, dump), and
+`data/aniso_nu/analyze.sh`, which merges the seeds, runs
+`scripts/local_roughness.py` at thresholds 1.125 and 0.8, and then
+`scripts/shape_nu.py` (fits and figure) and `scripts/zeta_shapes.py`.
+
+**Lengths.** $\ell_\times$ and $\ell_p$ are where $\zeta_W$ (chord) first
+drops below 1.125 and 0.8, at $L=2048$:
+
+![zeta_W(l) for the four shapes, L = 2048](../results/aniso_nu/zeta_W_shapes_L2048.png)
+
+| blocks | $\ell_\times$ | $\ell_p$ | plateau |
+|---|---|---|---|
+| 1×1 | (100, 236, 431, 779 for $L$ = 256–2048) | — | none: $\zeta_W>0.8$ up to $l\approx L/2$ |
+| 4×1 | $60\pm4$ | $270\pm170$ | $\zeta_W\approx0.68$–0.75 for $l\gtrsim600$ |
+| 8×1 | $39\pm1$ | $130\pm20$ | $\zeta_W\approx0.6$–0.7 for $l\gtrsim250$ |
+| 16×1 | $36\pm1$ | $93\pm10$ | $\zeta_W\approx0.6$–0.7 for $l\gtrsim200$ |
+
+The isotropic wall is qEW-like at all accessible scales: $\zeta_W$
+decreases slowly from 1.4 to about 1.1 at $l\approx1000$ and only drops
+below 1 when $l$ approaches $L$, so its $\ell_\times$
+grows $\propto L$ and is a finite-size effect. Among the anisotropic
+shapes $\ell_p$ moves by a factor of about 3 from 4×1 to 16×1, while
+$\ell_\times$ hardly changes between 8×1 and 16×1.
+
+**Threshold.** Joint fit of $\langle h_d\rangle = h_\infty + A L^{-1/\nu}$
+and $\sigma(h_d) = B L^{-1/\nu}$, as in §5.9, over $L=256$–2048 for every
+shape (`scripts/shape_nu.py`):
+
+![sigma(h_d) and local slopes for the four shapes](../results/aniso_nu/shape_nu.png)
+
+| blocks | $1/\nu$ (joint) | $\chi^2$ | $\chi^2$ at 0.577 | $\chi^2$ at 0.75 | $\sigma$ only | shift only |
+|---|---|---|---|---|---|---|
+| 1×1 | 0.80 (0.76–0.84) | 5.2/4 | 37.0/5 | 6.9/5 | 0.80 | — |
+| 4×1 | 0.66 (0.63–0.70) | 2.2/4 | 7.7/5 | 8.7/5 | 0.66 | 0.95 (0.67–1.20) |
+| 8×1 | 0.67 (0.63–0.71) | 4.7/4 | 9.7/5 | 9.4/5 | 0.65 | 0.84 (0.69–0.99) |
+| 16×1 | 0.73 (0.70–0.76) | 2.7/4 | 25.5/5 | 3.0/5 | 0.74 | 0.63 (0.50–0.76) |
+
+For 1×1, $\langle h_d\rangle$ does not depend on $L$
+($0.00788\pm0.00001$ at every $L$), so the shift carries no exponent and
+the fit is set by $\sigma$ alone. Local slopes of $\sigma$ between
+successive $L$:
+
+| blocks | 256→512 | 512→1024 | 1024→2048 |
+|---|---|---|---|
+| 1×1 | 0.69 ± 0.13 | 0.91 ± 0.12 | 0.75 ± 0.12 |
+| 4×1 | 0.71 ± 0.12 | 0.64 ± 0.11 | 0.62 ± 0.10 |
+| 8×1 | 0.85 ± 0.13 | 0.63 ± 0.12 | 0.54 ± 0.11 |
+| 16×1 | 0.72 ± 0.12 | 0.61 ± 0.14 | 0.91 ± 0.12 |
+
+**Reading.**
+- *The control works.* With the same boxes, seeds and analysis, isotropic
+  disorder gives $1/\nu = 0.80$, compatible with qEW and excluding 0.577
+  ($\chi^2=37/5$). The intermediate values of the anisotropic shapes are
+  not a bias of the method.
+- *The hypothesis fails.* It predicts 16×1, with the shortest $\ell_p$,
+  closest to 0.577. It is the farthest: $1/\nu = 0.73$, compatible with
+  qEW, and its last local slope is 0.91. 4×1 and 8×1 give the same 0.66
+  although their $\ell_p$ differ by a factor 2. Against $L/\ell_p$ (right
+  panel) the local slopes do not collapse: they dip to 0.55–0.65 around
+  $L/\ell_p\approx5$–10 for all three shapes, and 16×1 rises again at
+  $L/\ell_p\approx15$.
+- *Caveats.* $\ell_p$ of 4×1 is poorly determined ($\pm170$), the lever
+  arm in $\ell_p$ is only a factor 3, and each local slope has an error of
+  about 0.12, so a slow drift towards 0.577 at $L/\ell_p\gg20$ cannot be
+  excluded. But nothing in the data points to one.
+
+**Conclusion.** At $\Delta=0.2$ the geometry of the anisotropic walls is
+qKPZ for all three shapes, while the finite-size exponent of the
+threshold is $0.66$–0.73 and is not ordered by the geometric crossover
+length. So the 0.685 of §5.9 is not explained by $L/\ell_p$ being too
+small. Open: whether the exponent of the threshold is not that of
+directed percolation even though the roughness is, or whether some other,
+longer scale (not $\ell_p$) controls $\sigma(h_d)$, e.g. the finite-size
+scaling of the first blocking path in an $L\times P$ box.
 
 ## 6. Two-crossover model for $\zeta_W(l)$
 
