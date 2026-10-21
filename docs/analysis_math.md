@@ -746,7 +746,10 @@ What the figure shows:
   needed for its curvature.
 - **Blocks elongated along the motion ($AY>AX$: blue, orange, green)**
   stay within 3 % of 1 and, if anything, rise with $\lvert s\rvert$
-  ($\lambda<0$), but by at most 1.3σ: no conclusion yet.
+  ($\lambda<0$), but by at most 1.3σ: no conclusion yet. At $\Delta=0.2$
+  (`results/aniso_neg/`), 1×8 gives $h_d''/h_d = -0.9\pm0.6$, compatible
+  with zero, and 1×32 locks the flat wall onto the block grid, with a cusp
+  in $h_d(s)$ at $s=0$ rather than a KPZ term: no $\lambda<0$ is found.
 - **The square 2×2 control (purple) is flat**, like the isotropic case.
   The effect therefore comes from the rectangular shape of the blocks,
   not from correlating the disorder or from the lattice.
@@ -854,6 +857,21 @@ So the threshold scales with $1/\nu = 0.685\pm0.02$ at $L\le8192$, between
 qKPZ (0.577, $6\sigma$) and qEW (0.75, $3.5\sigma$), while the geometry of
 the wall below is that of qKPZ.
 
+**Spread rescaled by the qKPZ exponent** (`scripts/sigma_scaled.py`):
+
+![sigma(h_d) L^0.577 vs L, 8x1 blocks](../results/aniso_weak/hd_variance/sigma_L0577.png)
+
+| $L$ | 256 | 512 | 1024 | 2048 | 4096 | 8192 |
+|---|---|---|---|---|---|---|
+| $\sigma L^{0.577}$ | 0.0331(22) | 0.0275(18) | 0.0265(15) | 0.0273(14) | 0.0243(12) | 0.0211(10) |
+
+If the spread scaled with the qKPZ exponent this would be flat. It is flat
+within the errors from $L=512$ to 2048, and then falls: at $L=8192$ it is
+$3\sigma$ below $L=1024$. The point at $L=256$ is high, inside the
+crossover ($\ell_p\approx300$). The departure from flat grows with $L$,
+which is the opposite of a slow approach to qKPZ, although with two points
+beyond 2048 it is only a $3\sigma$ effect.
+
 **Roughness** (`results/aniso_weak/prod_roughness/`, estimators and bias
 of §5.6):
 
@@ -929,6 +947,39 @@ nearly linear in $\lvert s\rvert$. The global parabola (drawn) understates
 the curvature at $s=0$, which is why it overshoots 1 there. $\lambda$
 neither grows nor saturates with $L$ visibly: it is $L$-independent
 within the errors.
+
+**Finite-size scaling of the curvature** (`scripts/tilt_scaling.py`). With
+$`f_c(L,s)-f_c(L,0) = f_c\,L^{-1/\nu}\,g(sL^{1-\zeta})`$ and $g(x)\sim x^2$
+at small $x$,
+
+```math
+C(L,s) \equiv -\frac{2}{s^2}\left[\frac{\langle f_c(L,s)\rangle}{\langle f_c(L,0)\rangle}-1\right]
+\sim L^{2(1-\zeta)-1/\nu},
+```
+
+which is $+0.16$ for qKPZ, $+0.055$ for $\zeta=0.63$ with the measured
+$1/\nu=0.685$, and $-1.25$ for qEW (where, in addition, $\lambda=0$). The
+tilt runs use seeds 1–30 at every $s$, the same as at $s=0$, so the ratios
+are paired over seeds (bootstrap errors), with $\pm s$ averaged:
+
+![C(L,s) and collapse, 8x1 blocks](../results/aniso_weak/tilt/C_tilt.png)
+
+| $\lvert s\rvert$ | $C(512)$ | $C(1024)$ | $C(2048)$ | slope of $\ln C$ vs $\ln L$ |
+|---|---|---|---|---|
+| 0.05 | 17.6 ± 5.4 | 11.6 ± 4.2 | 15.2 ± 2.8 | −0.06 ± 0.25 |
+| 0.1 | 15.5 ± 1.8 | 13.2 ± 0.9 | 14.5 ± 0.7 | +0.01 ± 0.08 |
+| 0.2 | 9.8 ± 0.4 | 10.0 ± 0.2 | 10.3 ± 0.2 | +0.04 ± 0.03 |
+| 0.3 | 7.0 ± 0.2 | 7.1 ± 0.1 | 7.3 ± 0.1 | +0.04 ± 0.02 |
+
+The law holds only for $sL^{1-\zeta}\ll1$; here $sL^{0.37}$ runs from
+about 0.5 to 5, so only $\lvert s\rvert\lesssim0.1$ tests it ($C$ at 0.05
+and 0.1 are close, which suggests the parabolic regime is near). At
+$\lvert s\rvert=0.1$ the slope excludes qEW by $16\sigma$, and is $1.9\sigma$
+from $+0.16$ and $0.5\sigma$ from $+0.055$: it confirms a finite,
+$L$-independent $\lambda$, but does not separate the two values of $1/\nu$.
+The collapse with the qKPZ exponents (right panel) gives a single curve,
+but points from different $L$ barely overlap in $x$, so it is a weak
+test. Separating them would need $s\approx0.02$–0.05 with more seeds.
 
 **Conclusion.** With weak disorder correlated along the wall, the
 geometry of the critical wall is that of the qKPZ (directed-percolation)
