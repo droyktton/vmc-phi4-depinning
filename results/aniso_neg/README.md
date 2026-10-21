@@ -4,7 +4,7 @@ Weak disorder, Δ = 0.2, constant over blocks of 1×AY sites, elongated along th
 In §5.8 of `docs/analysis_math.md` (Δ = 0.3, L = 512), 1×8 blocks gave a threshold that rose slightly with
 the tilt, h_d″/h_d = +0.38 ± 0.29, i.e. λ < 0 but only at 1.3σ. At Δ = 0.2 this does not hold.
 
-**Threshold vs tilt** (`tilt/hd_tilt.png`, `tilt/hd_tilt.dat`; L = 512, 30 seeds per point, `scripts/hd_tilt.py`):
+**Threshold vs tilt** (`tilt/hd_tilt.png`; L = 512, 30 seeds per point, `scripts/hd_tilt.py`):
 
 | blocks | ⟨h_d⟩(0) | s = −0.2 | s = −0.1 | s = +0.1 | s = +0.2 | h_d″/h_d (parabola) |
 |---|---|---|---|---|---|---|
