@@ -123,3 +123,6 @@ L = 256–2048, 200 seeds per L: 1×1 0.80 (qEW-compatible control), 4×1 0.66, 
 ℓ_p = —, 270 ± 170, 130 ± 20, 93 ± 10. The second case of "Reading the outcome" applies: 16×1 has the
 shortest ℓ_p and is the farthest from 0.577, and the local slopes do not collapse on L/ℓ_p. The threshold
 exponent is not set by the geometric crossover.
+ζ_W(l) (`results/aniso_nu/zeta_W_shapes_L2048.png`) shows the knob is weaker than the pilot suggested:
+8×1 and 16×1 have nearly the same crossover (ℓ_p ratio 1.5, they collapse under l/ℓ_p), and 4×1 crosses
+over later but with a different curve that levels at 0.68–0.75.

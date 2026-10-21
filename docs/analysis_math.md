@@ -1032,9 +1032,14 @@ Scripts (cluster, not versioned): `data/aniso_nu/prod/run.sh` with
 `scripts/shape_nu.py` (fits and figure) and `scripts/zeta_shapes.py`.
 
 **Lengths.** $\ell_\times$ and $\ell_p$ are where $\zeta_W$ (chord) first
-drops below 1.125 and 0.8, at $L=2048$:
+drops below 1.125 and 0.8, at $L=2048$ (table: `lo_table.dat`, with
+errors; the figure marks the first crossing of the mean curve, which gives
+slightly larger values, e.g. 67, 45, 37 for $\ell_\times$ and 274, 150,
+100 for $\ell_p$). Left: $\zeta_W(l)$ at $L=2048$ and 1024; middle and
+right: the anisotropic curves against $l/\ell_\times$ and $l/\ell_p$
+(`scripts/zeta_shapes.py`):
 
-![zeta_W(l) for the four shapes, L = 2048](../results/aniso_nu/zeta_W_shapes_L2048.png)
+![zeta_W(l) for the four shapes, raw and rescaled by l_x and l_p](../results/aniso_nu/zeta_W_shapes_L2048.png)
 
 | blocks | $\ell_\times$ | $\ell_p$ | plateau |
 |---|---|---|---|
@@ -1047,8 +1052,16 @@ The isotropic wall is qEW-like at all accessible scales: $\zeta_W$
 decreases slowly from 1.4 to about 1.1 at $l\approx1000$ and only drops
 below 1 when $l$ approaches $L$, so its $\ell_\times$
 grows $\propto L$ and is a finite-size effect. Among the anisotropic
-shapes $\ell_p$ moves by a factor of about 3 from 4×1 to 16×1, while
-$\ell_\times$ hardly changes between 8×1 and 16×1.
+shapes the crossover moves less than the pilot suggested:
+- *8×1 and 16×1 have nearly the same crossover.* Their curves coincide up
+  to $l\approx30$, $\ell_p$ differs by a factor 1.4–1.5, and rescaled by
+  either $\ell_\times$ or $\ell_p$ they collapse onto one curve that
+  reaches the qKPZ value 0.63.
+- *4×1 crosses over later, but is not a shifted copy.* $\zeta_W$ falls
+  with a smaller slope, does not collapse with the other two under either
+  rescaling, and levels at 0.68–0.75 rather than 0.63 within $L=2048$.
+  Its $\ell_p$ is ill-defined: the curve oscillates around 0.8 for
+  $l\approx200$–600.
 
 **Threshold.** Joint fit of $\langle h_d\rangle = h_\infty + A L^{-1/\nu}$
 and $\sigma(h_d) = B L^{-1/\nu}$, as in §5.9, over $L=256$–2048 for every
@@ -1083,17 +1096,21 @@ successive $L$:
 - *The hypothesis fails.* It predicts 16×1, with the shortest $\ell_p$,
   closest to 0.577. It is the farthest: $1/\nu = 0.73$, compatible with
   qEW, and its last local slope is 0.91. 4×1 and 8×1 give the same 0.66
-  although their $\ell_p$ differ by a factor 2. Against $L/\ell_p$ (right
+  although 4×1 crosses over clearly later. 8×1 and 16×1, whose
+  $\zeta_W(l)$ nearly coincide, give $0.67$ and $0.73$ ($0.06\pm0.05$
+  apart, compatible), but neither is near 0.577 at $L/\ell_p$ up to 15–20. Against $L/\ell_p$ (right
   panel) the local slopes do not collapse: they dip to 0.55–0.65 around
   $L/\ell_p\approx5$–10 for all three shapes, and 16×1 rises again at
   $L/\ell_p\approx15$.
-- *Caveats.* $\ell_p$ of 4×1 is poorly determined ($\pm170$), the lever
-  arm in $\ell_p$ is only a factor 3, and each local slope has an error of
+- *Caveats.* The lever arm is short: the two shapes that collapse differ
+  in $\ell_p$ by only 1.5, and 4×1, the one with a clearly longer
+  crossover, has a different $\zeta_W(l)$ and a poorly determined $\ell_p$
+  ($\pm170$). Each local slope has an error of
   about 0.12, so a slow drift towards 0.577 at $L/\ell_p\gg20$ cannot be
   excluded. But nothing in the data points to one.
 
-**Conclusion.** At $\Delta=0.2$ the geometry of the anisotropic walls is
-qKPZ for all three shapes, while the finite-size exponent of the
+**Conclusion.** At $\Delta=0.2$ the geometry of the 8×1 and 16×1 walls is
+qKPZ, and that of 4×1 approaches it from above within $L\le2048$, while the finite-size exponent of the
 threshold is $0.66$–0.73 and is not ordered by the geometric crossover
 length. So the 0.685 of §5.9 is not explained by $L/\ell_p$ being too
 small. Open: whether the exponent of the threshold is not that of
