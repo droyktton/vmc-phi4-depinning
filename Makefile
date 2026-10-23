@@ -45,6 +45,22 @@ NVCC=-std=$(STD) $(GENCODE)
 $(TARGET): main.cu misistema.h
 	nvcc $(NVCC) -O2 -I. -o $(TARGET) main.cu $(FLAGS)
 
+# velocity-driven ensemble (main_vd.cu), e.g. make vd AMPDIS=0.3 VD_TARGET=phi4vmc_vd_D0.3
+VD_TARGET=phi4vmc_vd
+
+vd: $(VD_TARGET)
+
+$(VD_TARGET): main_vd.cu misistema.h
+	nvcc $(NVCC) -O2 -I. -o $(VD_TARGET) main_vd.cu $(FLAGS)
+
+# the same at finite velocity, Euler dynamics (main_vdyn.cu), e.g. make vdyn AMPDIS=0.3 VDYN_TARGET=phi4vmc_vdyn_D0.3
+VDYN_TARGET=phi4vmc_vdyn
+
+vdyn: $(VDYN_TARGET)
+
+$(VDYN_TARGET): main_vdyn.cu misistema.h
+	nvcc $(NVCC) -O2 -I. -o $(VDYN_TARGET) main_vdyn.cu $(FLAGS)
+
 # SYCL port for Intel GPUs (misistema_sycl.h; oneAPI icpx + oneDPL), e.g.
 #   module swap gnu13 intel/2025.3.0; module load dpl
 #   make sycl AMPDIS=0.4 TARGET_SYCL=phi4vmc_sycl_D0.4
@@ -63,6 +79,6 @@ $(TARGET_SYCL): main.cu misistema_sycl.h
 	icpx -fsycl $(SYCL_TARGETS) -std=c++17 -O2 -fp-model=precise -I. -DVMC_SYCL -x c++ -o $(TARGET_SYCL) main.cu $(FLAGS)
 
 clean:
-	rm -f phi4vmc phi4vmc_D* phi4vmc_sycl*
+	rm -f phi4vmc phi4vmc_D* phi4vmc_vd* phi4vmc_sycl*
 
-.PHONY: sycl clean
+.PHONY: vd vdyn sycl clean

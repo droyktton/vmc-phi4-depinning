@@ -10,6 +10,14 @@
 // phi_ij by the root of the cubic steady-state equation (dphi_ij/dt=0)
 // closest to its current value, sweeping the lattice with a checkerboard
 // decomposition (two-color updates run in parallel on the GPU).
+//
+// Velocity-driven ensemble (main_vd.cu): the field may also depend on y,
+// h(y) = h - H0*(y - y_c), a parabolic well (spring 2*H0) that holds the
+// wall near y_c, and the disorder may be shifted by row_offset rows,
+// r(x, y + row_offset), a conveyor belt that keeps the wall inside the
+// box while it advances through fresh disorder (set_field_gradient,
+// shift_rows). With H0 = 0 and row_offset = 0 (the default) the code
+// does exactly what it did before.
 #include <thrust/device_ptr.h>
 #include <thrust/device_malloc.h>
 #include <thrust/device_free.h>
@@ -138,19 +146,36 @@ int vieta_solver(float p, float q, float &x1, float &x2, float &x3)
 // deterministic and identical every time the same site is queried. With
 // AX=AY=1 the key is the site index x+Lx*y. It doesn't depend on Ly, so
 // a taller box holds the same sample.
+//
+// y is the row in the lab frame (box row + row_offset, >= 0), so the
+// index is 64-bit. Its high word, nonzero only beyond 2^32 sites, is
+// mixed into the counter's seed word; for the boxes of the
+// force-driven runs it is 0 and the key is the same as ever.
 __device__
-float site_disorder(int x, int y, int Lx, unsigned long disorder_seed)
+float site_disorder(int x, long y, int Lx, unsigned long disorder_seed)
 {
-	int site_index=(x/AX)+(Lx/AX)*(y/AY);
+	unsigned long long site_index=(unsigned long long)(x/AX)+(unsigned long long)(Lx/AX)*(unsigned long long)(y/AY);
+	uint32_t high=uint32_t(site_index>>32);
 	RNG rng;
 	RNG::ctr_type c={{}};
 	RNG::key_type k={{}};
-	c[1]=uint32_t(disorder_seed);
+	c[1]=uint32_t(disorder_seed)^(high*0x9E3779B9u);
 	c[0]=uint32_t(site_index);
 	k[0]=uint32_t(site_index);
 	RNG::ctr_type r = rng(c, k);
 	return AMPDIS*(2.0*u01_open_closed_32_53(r[0])-1.0);
 }
+
+// the external drive as the kernels see it: the field h(y) = h - grad*(y
+// - center) at box row y (grad=0: uniform h, bit-for-bit as before), and
+// the disorder's row offset (box row y holds lab row y + row_offset)
+struct Drive
+{
+	float h, grad, center;
+	long row_offset;
+	__host__ __device__
+	float field(int y) const { return grad==0.0f ? h : h - grad*(float(y)-center); }
+};
 
 // phi of the right (dir=+1) or left (dir=-1) neighbor of (x,y). Across
 // the x boundary the BC is helical, phi(x+Lx,y) = phi(x,y-tilt): a wall
@@ -178,11 +203,11 @@ struct velocityop
 {
 	int Lx, Ly, tilt;
 	float * phi;
-	float external_field;
+	Drive drive;
 	unsigned long disorder_seed;
 
-	velocityop(float *_phi, int _Lx, int _Ly, int _tilt, float _external_field, unsigned long _disorder_seed):
-	phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),external_field(_external_field),disorder_seed(_disorder_seed){};
+	velocityop(float *_phi, int _Lx, int _Ly, int _tilt, Drive _drive, unsigned long _disorder_seed):
+	phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),drive(_drive),disorder_seed(_disorder_seed){};
 
 	__device__
 	float operator()(int i)
@@ -206,10 +231,10 @@ struct velocityop
 		if(y==Ly-1) phi_down*=-1;
 
 		float laplacian = phi_up+phi_down+phi_right+phi_left-4.0*phi_center;
-		float r = site_disorder(x, y, Lx, disorder_seed);
+		float r = site_disorder(x, y+drive.row_offset, Lx, disorder_seed);
 		float phi4_force = EPSILON0*(R0*(1.0+r)*phi_center - phi_center*phi_center*phi_center);
 
-		return CEL*laplacian + phi4_force + external_field;
+		return CEL*laplacian + phi4_force + drive.field(y);
 	}
 };
 
@@ -220,6 +245,17 @@ struct abs_velocityop
 	abs_velocityop(velocityop _v):v(_v){};
 	__device__
 	float operator()(int i){ return fabsf(v(i)); }
+};
+
+// phi_i + dt*dphi_i/dt (System::euler_step)
+struct euler_update
+{
+	const float *phi;
+	float dt;
+	velocityop v;
+	euler_update(const float *_phi, float _dt, velocityop _v):phi(_phi),dt(_dt),v(_v){};
+	__device__
+	float operator()(int i){ return phi[i]+dt*v(i); }
 };
 
 // new value of a site with current value phi_center, neighbor sum
@@ -254,12 +290,12 @@ struct vmcop
 {
 	int Lx, Ly, tilt;
 	float * phi;
-	float external_field;
+	Drive drive;
 	int color_offset;
 	unsigned long disorder_seed;
 
-	vmcop(float *_phi, int _Lx, int _Ly, int _tilt, float _external_field, int _color_offset, unsigned long _disorder_seed)
-	:phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),external_field(_external_field),color_offset(_color_offset),disorder_seed(_disorder_seed)
+	vmcop(float *_phi, int _Lx, int _Ly, int _tilt, Drive _drive, int _color_offset, unsigned long _disorder_seed)
+	:phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),drive(_drive),color_offset(_color_offset),disorder_seed(_disorder_seed)
 	{};
 
 	__device__
@@ -286,7 +322,7 @@ struct vmcop
 		if(y==Ly-1) phi_down*=-1;
 
 		phi[center]=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
-			site_disorder(x, y, Lx, disorder_seed),external_field);
+			site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(y));
 	}
 };
 
@@ -307,7 +343,7 @@ struct vmcop
 #define TILE_EPS 1e-6
 #endif
 __global__
-void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, float external_field, int color_offset,
+void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, Drive drive, int color_offset,
 	unsigned long disorder_seed, const unsigned char *active, unsigned char *changed,
 	unsigned long long *work, float tile_eps)
 {
@@ -331,7 +367,7 @@ void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, float external_field
 	if(y==Ly-1) phi_down*=-1;
 
 	float new_phi=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
-		site_disorder(x, y, Lx, disorder_seed),external_field);
+		site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(y));
 	if(new_phi!=phi_center){
 		phi[center]=new_phi;
 		if(fabsf(new_phi-phi_center)>tile_eps) changed[tile]=1;
@@ -425,6 +461,12 @@ struct is_positive
 	bool operator()(float x){ return x > 0; }
 };
 
+struct is_negative
+{
+	__host__ __device__
+	bool operator()(float x){ return x < 0; }
+};
+
 // initial straight wall y = y_low + tilt*x/Lx (phi=+1 below, -1 above)
 struct tilted_wall
 {
@@ -457,6 +499,14 @@ class System{
 		int L2;   // Lx*Ly
 
 		float external_field;
+		// velocity-driven ensemble (see the top of the file): field
+		// gradient H0 and well center y_c (box rows), and the disorder's
+		// row offset; neg_discarded counts the phi<0 sites shifted out
+		// through the bottom (bubbles left behind), so that the lab-frame
+		// area of the phi>0 phase stays continuous across shifts
+		float field_grad, field_center;
+		long row_offset;
+		long long neg_discarded;
 		int total_time;
 		float tolres;
 		bool last_converged; // did the last find_next_metastable converge?
@@ -511,6 +561,8 @@ class System{
 			}
 
 			external_field=0.0;
+			field_grad=0.0f; field_center=0.0f;
+			row_offset=0; neg_discarded=0;
 			total_time=0;
 			tolres=TOLRES;
 			last_converged=true;
@@ -598,6 +650,52 @@ class System{
 
 		void set_external_field(float h){ external_field=h; }
 		float get_external_field(){ return external_field; }
+
+		// h(y) = external_field - H0*(y - y_c), y_c in box rows
+		void set_field_gradient(float H0, float y_c)
+		{
+			if(tilt!=0 && H0!=0){
+				std::cout << "ERROR: a field gradient with a tilt is not supported" << std::endl;
+				exit(1);
+			}
+			field_grad=H0; field_center=y_c;
+		}
+		long get_row_offset(){ return row_offset; }
+		// initial offset (before any shift): box row y holds lab row y+R
+		void set_row_offset(long R){ row_offset=R; neg_discarded=0; }
+		Drive drive(){ Drive d={external_field,field_grad,field_center,row_offset}; return d; }
+
+		// conveyor belt: moves the field n rows down, phi(x,y) <- phi(x,y+n),
+		// fills the top n rows with the phase above the wall (-1), and
+		// shifts the disorder and the well center along, so the wall sees
+		// the same medium and the same field: an exact symmetry except for
+		// the new bulk rows, which relax in a few sweeps far from the wall.
+		// n must be a multiple of TILE (keeps tiles and checkerboard colors)
+		void shift_rows(int n)
+		{
+			if(n<=0) return;
+			if(n%TILE!=0 || n>=Ly){
+				std::cout << "ERROR: shift_rows(" << n << "): must be a multiple of " << TILE << " below Ly" << std::endl;
+				exit(1);
+			}
+			long nn=long(n)*Lx;
+			neg_discarded+=thrust::count_if(d_phi,d_phi+nn,is_negative());
+			thrust::copy(d_phi+nn,d_phi+L2,d_snap);
+			thrust::copy(d_snap,d_snap+(L2-nn),d_phi);
+			thrust::fill(d_phi+(L2-nn),d_phi+L2,-1.0f);
+			row_offset+=n;
+			field_center-=n;
+		}
+
+		// area of the phi>0 phase in the lab frame, counting the rows
+		// shifted out (all phi>0 but for neg_discarded sites): with a
+		// single wall it is Lx times its mean height, overhangs and
+		// bubbles included (the quantity conjugate to a uniform field)
+		long long positive_area_lab()
+		{
+			long long n=thrust::count_if(d_phi,d_phi+L2,is_positive());
+			return n+(long long)row_offset*Lx-neg_discarded;
+		}
 		int get_L(){ return Lx; }
 		int get_Ly(){ return Ly; }
 		int get_total_time(){ return total_time; }
@@ -625,7 +723,7 @@ class System{
 					thrust::for_each(
 						thrust::make_counting_iterator(0),
 						thrust::make_counting_iterator(half_L2),
-						vmcop(phi_ptr,Lx,Ly,tilt,external_field,color_offset,disorder_seed)
+						vmcop(phi_ptr,Lx,Ly,tilt,drive(),color_offset,disorder_seed)
 					);
 				}
 				total_time++;
@@ -646,13 +744,27 @@ class System{
 			{
 				for(int color_offset=0;color_offset<2;color_offset++){
 					cudaMemset(changed,0,ntiles);
-					vmc_tiles_kernel<<<ntiles,TILE*TILE/2>>>(phi_ptr,Lx,Ly,tilt,external_field,color_offset,
+					vmc_tiles_kernel<<<ntiles,TILE*TILE/2>>>(phi_ptr,Lx,Ly,tilt,drive(),color_offset,
 						disorder_seed,active,changed,work,tile_eps);
 					if(sweep==0 && color_offset==0) cudaMemset(active,1,ntiles);
 					else spread_activity<<<(ntiles+255)/256,256>>>(changed,active,Tx,Ty,tilt);
 				}
 				total_time++;
 			}
+		}
+
+		// one explicit Euler step of the real dynamics (main_vdyn.cu),
+		// phi <- phi + dt*dphi/dt with the force of velocityop, all sites
+		// in parallel (Jacobi: the new field goes to d_snap, then the two
+		// buffers swap; d_snap is otherwise only scratch for
+		// find_next_metastable)
+		void euler_step(float dt)
+		{
+			thrust::transform(thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2),
+				d_snap, euler_update(phi_ptr,dt,velocityop(phi_ptr,Lx,Ly,tilt,drive(),disorder_seed)));
+			thrust::swap(d_phi,d_snap);
+			phi_ptr=thrust::raw_pointer_cast(&d_phi[0]);
+			total_time++;
 		}
 
 		// mean residual velocity <dphi/dt>, i.e. the paper's convergence
@@ -663,7 +775,7 @@ class System{
 			return thrust::transform_reduce(
 				thrust::make_counting_iterator(0),
 				thrust::make_counting_iterator(L2),
-				velocityop(phi_ptr,Lx,Ly,tilt,external_field,disorder_seed),
+				velocityop(phi_ptr,Lx,Ly,tilt,drive(),disorder_seed),
 				float(0.0), thrust::plus<float>()
 			)/float(Lx);
 		}
@@ -675,7 +787,7 @@ class System{
 			return thrust::transform_reduce(
 				thrust::make_counting_iterator(0),
 				thrust::make_counting_iterator(L2),
-				abs_velocityop(velocityop(phi_ptr,Lx,Ly,tilt,external_field,disorder_seed)),
+				abs_velocityop(velocityop(phi_ptr,Lx,Ly,tilt,drive(),disorder_seed)),
 				0.0f, thrust::maximum<float>());
 		}
 
