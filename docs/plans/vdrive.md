@@ -40,7 +40,29 @@ imposed instead. Only macroscopically flat walls are covered.
 - **No-passing.** S ≥ 0 at every quasi-static step, and every step converged.
 - **Euler towards the quasi-static limit** (Δ = 0.3, L = 256, H0 = 1e-4, seed 1). ⟨F⟩ = 0.0369,
   0.0205, 0.0133 and 0.0114 for v = 0.1, 0.03, 0.01 and 0.003, against 0.0105 for the VMC. Only
-  3–11 τ_F per run.
+  3–11 τ_F per run, and the fast runs had not relaxed (next item), so the v = 0.1 value is a
+  transient.
+- **Relaxation of the spring.** The mean drive relaxes towards its stationary value in
+  τ ≈ 1/(μ H0), with μ ≈ 2.12 the clean-wall mobility (longer with disorder): τ ≈ 4700 at
+  H0 = 1e-4. Runs must last several τ, or start with F0 near the expected value.
+- **Ensemble equivalence, clean lattice.** `main_vdyn.cu` with H0 = 0 runs at fixed force. With
+  runs longer than 8τ, imposing v = 0.05 gives ⟨F⟩ = 0.02535 (H0 = 1e-3) and 0.02526 (H0 = 1e-4),
+  and the fixed force h = 0.02535 gives v = 0.0502: agreement within 0.4 %.
+- **Ensemble equivalence with disorder** (Δ = 0.3, L = 256, 3 seeds). Fixed force first, then
+  the same v imposed with the spring, starting at F0 = h and running at least 8/(2.5 H0):
+
+  | v | h (fixed force) | ⟨F⟩, H0 = 1e-4 | ⟨F⟩, H0 = 3e-5 |
+  |---|---|---|---|
+  | 0.0923 | 0.05 | 0.04993 | 0.04994 |
+  | 0.0501 | 0.03 | 0.02995 | 0.02994 |
+  | 0.0274 | 0.02 | 0.01999 | 0.01994 |
+  | 0.0132 | 0.015 | 0.01468 ± 0.00015 | 0.01485 ± 0.00009 |
+
+  For v ≥ 0.027 the two agree within 0.2 %. At v = 0.013 the spring gives a lower drive, by 2 %
+  at H0 = 1e-4 and 1 % at H0 = 3e-5. That is what is expected once L_m is no longer much larger
+  than the correlation length ξ_v, which grows towards the threshold. At h = 0.013 the fixed-force
+  wall stops in all 3 seeds: an unbounded path finds stronger pinning than the 192-row path of
+  the bisection (h_d ≈ 0.0128).
 
 ## First comparison with the force-driven ensemble
 Δ = 0.3, L = 256, 3 seeds, quasi-static, steps 400–2000 of dW = 0.5:
@@ -60,7 +82,8 @@ runs must be much longer, and Ly must exceed the largest avalanche (Ly = 512 was
 H0 = 1e-5).
 
 ## Next
-- **Fixed-force mode** in `main_vdyn.cu` (H0 = 0, report v = du/dt), for v(h) and β.
+- **v(h) with disorder** by both routes (fixed force, H0 = 0; velocity-driven ⟨F⟩), checking the
+  equivalence at finite v (L_m ≫ ξ_v), and β.
 - **S(q) of snapshot series** (`--dump-every`).
 - **Thermal noise.**
 - **Production on the cluster.**

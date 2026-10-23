@@ -15,6 +15,12 @@
 //
 // Output, vdyn_v<v>_seed<seed>.dat, every tout time units:
 //   t W u F
+//
+// Fixed-force mode (H0 = 0): no spring, a uniform field h = h_u, and the
+// wall moves at whatever velocity it finds; v is ignored and the output,
+// vdyn_h<h_u>_seed<seed>.dat, is t u (the velocity is the slope of u(t)).
+// Comparing (h, v) from this mode with (<F>, v) from the velocity-driven
+// one tests the equivalence of the two ensembles at finite v.
 // u = (area of the phi>0 phase)/Lx - 1/2, lab frame, as in main_vd.cu.
 // With --dump-every k, the field every k outputs as raw float32
 // (vdynfield_t<t>_seed<seed>.bin, Lx*Ly, box frame).
@@ -34,7 +40,7 @@ int main(int argc, char **argv)
 		std::cout << "usage: " << argv[0] << " L Ly H0 h_u v dt tmax seed [--tout t] [--F0 f] [--recenter d] [--row-offset R] [--dump-every k] [--start-from file]" << std::endl;
 		std::cout << "  L          lattice size Lx along the wall (multiple of 32)" << std::endl;
 		std::cout << "  Ly         box height along the motion (multiple of 32)" << std::endl;
-		std::cout << "  H0         field gradient (spring 2*H0, mass length sqrt(0.47/H0))" << std::endl;
+		std::cout << "  H0         field gradient (spring 2*H0, mass length sqrt(0.47/H0)); 0: fixed force h_u" << std::endl;
 		std::cout << "  h_u        uniform field (about the expected drive)" << std::endl;
 		std::cout << "  v          velocity of the well center, rows per unit time" << std::endl;
 		std::cout << "  dt         Euler time step (stable below ~0.19; 0.05 is safe)" << std::endl;
@@ -69,8 +75,9 @@ int main(int argc, char **argv)
 		else if(flag=="--start-from" && i+1<argc) start_from=argv[++i];
 		else{ std::cerr << "ERROR: unknown flag " << flag << std::endl; return 1; }
 	}
-	if(L%TILE!=0 || Ly%TILE!=0 || H0<=0 || dt<=0 || recenter<TILE || 2*recenter+2*WALL_MARGIN>=Ly){
-		std::cerr << "ERROR: need L, Ly multiples of " << TILE << ", H0 > 0, dt > 0, " << TILE
+	bool fixed_force=(H0==0);
+	if(L%TILE!=0 || Ly%TILE!=0 || H0<0 || dt<=0 || recenter<TILE || 2*recenter+2*WALL_MARGIN>=Ly){
+		std::cerr << "ERROR: need L, Ly multiples of " << TILE << ", H0 >= 0, dt > 0, " << TILE
 			<< " <= recenter < Ly/2 - " << WALL_MARGIN << std::endl;
 		return 1;
 	}
@@ -90,20 +97,26 @@ int main(int argc, char **argv)
 	sys.set_row_offset(row_offset0);
 	sys.set_external_field(h_u);
 
+	if(fixed_force && (v!=0 || F0!=h_u)) std::cout << "WARNING: H0 = 0 (fixed force h = h_u): v and --F0 are ignored" << std::endl;
+	if(fixed_force) v=0;
+
 	double area_to_u=1.0/L;
 	double u=sys.positive_area_lab()*area_to_u-0.5;
-	double W0=u+(F0-h_u)/H0;
+	double W0=fixed_force ? 0 : u+(F0-h_u)/H0;
 
 	long nsteps=lround(tmax/dt), nout=std::max(1L,lround(tout/dt));
 	std::cout << "Lx=" << L << " Ly=" << Ly << " H0=" << H0 << " h_u=" << h_u << " v=" << v << " dt=" << dt
-		<< " tmax=" << tmax << " seed=" << seed << " L_m=" << sqrt(2*sqrt(2.)/3/(2*H0)) << std::endl;
+		<< " tmax=" << tmax << " seed=" << seed;
+	if(fixed_force) std::cout << " (fixed force)" << std::endl;
+	else std::cout << " L_m=" << sqrt(2*sqrt(2.)/3/(2*H0)) << std::endl;
 
 	char filename[200];
-	sprintf(filename,"vdyn_v%g_seed%lu.dat",v,seed);
+	if(fixed_force) sprintf(filename,"vdyn_h%g_seed%lu.dat",h_u,seed);
+	else sprintf(filename,"vdyn_v%g_seed%lu.dat",v,seed);
 	std::ofstream out(filename);
 	out << "# Lx=" << L << " Ly=" << Ly << " H0=" << H0 << " h_u=" << h_u << " v=" << v << " dt=" << dt
 		<< " tout=" << nout*dt << " seed=" << seed << " AMPDIS=" << AMPDIS << " AX=" << AX << " AY=" << AY << std::endl;
-	out << "# t W u F" << std::endl;
+	out << (fixed_force ? "# t u" : "# t W u F") << std::endl;
 	out.precision(10);
 
 	for(long step=0;step<=nsteps;step++){
@@ -111,7 +124,8 @@ int main(int argc, char **argv)
 		double W=W0+v*t;
 		if(step%nout==0){
 			u=sys.positive_area_lab()*area_to_u-0.5;
-			out << t << " " << W << " " << u << " " << h_u+H0*(W-u) << "\n";
+			if(fixed_force) out << t << " " << u << "\n";
+			else out << t << " " << W << " " << u << " " << h_u+H0*(W-u) << "\n";
 			if(sys.escaped()){
 				std::cerr << "ERROR: t=" << t << ": the wall reached the top of the box (Ly too small, or v, h_u too large)" << std::endl;
 				return 1;
