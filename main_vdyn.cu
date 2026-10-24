@@ -23,7 +23,10 @@
 // one tests the equivalence of the two ensembles at finite v.
 // u = (area of the phi>0 phase)/Lx - 1/2, lab frame, as in main_vd.cu.
 // With --dump-every k, the field every k outputs as raw float32
-// (vdynfield_t<t>_seed<seed>.bin, Lx*Ly, box frame).
+// (vdynfield_t<t>_seed<seed>.bin, Lx*Ly, box frame); with --dump-band B,
+// only the 2B rows centered on the wall's mean height
+// (vdynfield_t<t>_y<lab row of the first>_seed<seed>.bin, 2B*Lx), and
+// with --dump-after t0 none before t0 (the transient).
 #include <iostream>
 #include <fstream>
 #include <cstdio>
@@ -37,7 +40,7 @@
 int main(int argc, char **argv)
 {
 	if(argc<9){
-		std::cout << "usage: " << argv[0] << " L Ly H0 h_u v dt tmax seed [--tout t] [--F0 f] [--recenter d] [--row-offset R] [--dump-every k] [--start-from file]" << std::endl;
+		std::cout << "usage: " << argv[0] << " L Ly H0 h_u v dt tmax seed [--tout t] [--F0 f] [--recenter d] [--row-offset R] [--dump-every k] [--dump-band B] [--dump-after t0] [--start-from file]" << std::endl;
 		std::cout << "  L          lattice size Lx along the wall (multiple of 32)" << std::endl;
 		std::cout << "  Ly         box height along the motion (multiple of 32)" << std::endl;
 		std::cout << "  H0         field gradient (spring 2*H0, mass length sqrt(0.47/H0)); 0: fixed force h_u" << std::endl;
@@ -51,6 +54,8 @@ int main(int argc, char **argv)
 		std::cout << "  --recenter d   shift the box once the wall is more than d rows above Ly/2 (default 64)" << std::endl;
 		std::cout << "  --row-offset R the box starts at lab row R (default 0)" << std::endl;
 		std::cout << "  --dump-every k save the field every k outputs" << std::endl;
+		std::cout << "  --dump-band B  save only the 2B rows around the wall (for long series)" << std::endl;
+		std::cout << "  --dump-after t no dumps before time t" << std::endl;
 		std::cout << "  --start-from f start from a field saved by main_vd.cu/main_vdyn.cu (same L, Ly; give its --row-offset)" << std::endl;
 		return 1;
 	}
@@ -62,7 +67,8 @@ int main(int argc, char **argv)
 	unsigned long seed=strtoul(argv[8],NULL,10);
 	float F0=h_u;
 	double tout=1.0;
-	int recenter=64, dump_every=0;
+	int recenter=64, dump_every=0, dump_band=0;
+	double dump_after=0;
 	long row_offset0=0;
 	std::string start_from;
 	for(int i=9;i<argc;i++){
@@ -72,6 +78,8 @@ int main(int argc, char **argv)
 		else if(flag=="--recenter" && i+1<argc) recenter=atoi(argv[++i]);
 		else if(flag=="--row-offset" && i+1<argc) row_offset0=atol(argv[++i]);
 		else if(flag=="--dump-every" && i+1<argc) dump_every=atoi(argv[++i]);
+		else if(flag=="--dump-band" && i+1<argc) dump_band=atoi(argv[++i]);
+		else if(flag=="--dump-after" && i+1<argc) dump_after=atof(argv[++i]);
 		else if(flag=="--start-from" && i+1<argc) start_from=argv[++i];
 		else{ std::cerr << "ERROR: unknown flag " << flag << std::endl; return 1; }
 	}
@@ -81,6 +89,7 @@ int main(int argc, char **argv)
 			<< " <= recenter < Ly/2 - " << WALL_MARGIN << std::endl;
 		return 1;
 	}
+	if(2*dump_band>Ly){ std::cerr << "ERROR: --dump-band must be at most Ly/2" << std::endl; return 1; }
 	if(dt>0.15f) std::cout << "WARNING: dt = " << dt << " is close to the Euler stability limit (~0.19)" << std::endl;
 	if(H0*Ly/2+fabsf(h_u)>0.3f)
 		std::cout << "WARNING: |h| reaches " << H0*Ly/2+fabsf(h_u) << " in the box (spinodal 0.385)" << std::endl;
@@ -131,10 +140,18 @@ int main(int argc, char **argv)
 				return 1;
 			}
 			long iout=step/nout;
-			if(dump_every>0 && iout%dump_every==0){
-				sprintf(filename,"vdynfield_t%g_seed%lu.bin",t,seed);
-				std::ofstream fout(filename,std::ios::binary);
-				sys.print_field_binary(fout);
+			if(dump_every>0 && iout%dump_every==0 && t>=dump_after){
+				if(dump_band>0){
+					int y0=std::min(std::max(0,int(u-sys.get_row_offset())-dump_band),Ly-2*dump_band);
+					sprintf(filename,"vdynfield_t%g_y%ld_seed%lu.bin",t,y0+sys.get_row_offset(),seed);
+					std::ofstream fout(filename,std::ios::binary);
+					sys.print_rows_binary(fout,y0,2*dump_band);
+				}
+				else{
+					sprintf(filename,"vdynfield_t%g_seed%lu.bin",t,seed);
+					std::ofstream fout(filename,std::ios::binary);
+					sys.print_field_binary(fout);
+				}
 			}
 			double above=u-sys.get_row_offset()-Ly/2;
 			if(above>recenter) sys.shift_rows(TILE*int(above/TILE));

@@ -938,6 +938,15 @@ class System{
 			fout << "\n" << std::endl;
 		}
 
+		// the same for box rows y0..y0+n-1 only (a band around the wall,
+		// for long series of snapshots); read_field(path, Lx) in
+		// scripts/wall_contour.py reads it as an n x Lx field
+		void print_rows_binary(std::ofstream &fout, int y0, int n)
+		{
+			thrust::host_vector<float> h_rows(d_phi+(size_t)Lx*y0,d_phi+(size_t)Lx*(y0+n));
+			fout.write(reinterpret_cast<const char*>(h_rows.data()),sizeof(float)*(size_t)Lx*n);
+		}
+
 		// raw float32 dump of the whole field, row-major (index x+y*Lx, Ly
 		// rows of Lx), for
 		// offline contour extraction (scripts/wall_contour.py); fout must be
