@@ -65,9 +65,9 @@ def line(outdir, L, H0, h_u, v, T, seed, extra=''):
 
 
 def v_guess(h):
-    # rough v(h) for the run lengths only (from L = 256, Delta = 0.3; on the low side,
-    # so runs come out long rather than short)
-    return 0.035 * max(h / args.hc - 1, 1e-3) ** 0.75
+    # rough v(h) for the run lengths only: v/h_c against eps, from L = 256 at Delta = 0.3 (it
+    # nearly collapses with Delta = 1.0); on the low side, so runs come out long rather than short
+    return 0.035 / 0.01339 * args.hc * max(h / args.hc - 1, 1e-3) ** 0.75
 
 
 if args.stage == 'ff':

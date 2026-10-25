@@ -9,6 +9,18 @@ Reference: A. B. Kolton, E. E. Ferrero, and A. Rosso, "Depinning free of
 the elastic approximation," Phys. Rev. B **108**, 174201 (2023)
 ([arXiv:2306.13415](https://arxiv.org/abs/2306.13415)).
 
+## Drivers
+
+| program | build | what it does | docs |
+|---|---|---|---|
+| `main.cu` | `make` | force-driven: `h_d` per sample by bisection (VMC), critical wall | below; [analysis_math.md](docs/analysis_math.md) |
+| `main.cu`, SYCL | `make sycl` | the same on Intel GPUs | [intel_gpu.md](docs/intel_gpu.md) |
+| `main_vd.cu` | `make vd` | velocity-driven, quasi-static: a parabolic well (field gradient) advanced in steps, VMC | [vdrive.md](docs/vdrive.md) |
+| `main_vdyn.cu` | `make vdyn` | finite velocity, explicit Euler at T = 0: imposed v (spring) or fixed force | [vdrive.md](docs/vdrive.md) |
+
+All share `misistema.h` and the build options below (`AMPDIS`, `AX`, `AY`, ...); compile-time
+block disorder (`AX x AY`) and the tilted box (`--tilt`) apply to `main.cu`.
+
 ## Model
 
 ```
@@ -70,6 +82,8 @@ make                       # builds ./phi4vmc with the default parameters
 make AMPDIS=0.4 CEL=1.0    # override disorder strength / elastic constant
 make AMPDIS=0.6 TARGET=phi4vmc_D0.6               # named binary (one per Delta)
 make ARCH=sm_86                                    # force a GPU architecture
+make vd AMPDIS=0.3 VD_TARGET=phi4vmc_vd_D0.3       # velocity-driven, quasi-static (docs/vdrive.md)
+make vdyn AMPDIS=0.3 VDYN_TARGET=phi4vmc_vdyn_D0.3 # finite velocity / fixed force, Euler
 ```
 
 The GPU architecture is chosen automatically, so the same `make` works on
@@ -227,6 +241,11 @@ it agrees with the flat restart in every sample tested.
 
 Cost per sample, legacy vs. current, same GPU: `L=2048`: ×8
 (`Delta=0.4`) to ×19 (`Delta=1.0`); `L=4096`, `Delta=1.0`: 1361 s → 62 s.
+
+The Euler driver `main_vdyn.cu` updates every site every step: 0.06 ms
+per step at `L x Ly = 1024 x 512` and 0.2 ms at `2048 x 1024` on an RTX
+3080 (0.10 and 0.33 ms on a GTX 1080). See
+[docs/vdrive.md](docs/vdrive.md) §4.
 
 ## Analysis
 

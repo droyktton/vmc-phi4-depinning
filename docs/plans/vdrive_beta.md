@@ -2,7 +2,7 @@
 
 ## Context
 `main_vdyn.cu` (Euler, T = 0) runs either at fixed force (H0 = 0) or at imposed velocity with a
-spring (H0 > 0); see `docs/plans/vdrive.md`. At L = 256 the two give the same v(h) within 0.2 % for
+spring (H0 > 0); see `docs/vdrive.md`. At L = 256 the two give the same v(h) within 0.2 % for
 v ≥ 0.027. Near threshold the spring gives a lower drive, by 1–2 %, and the gap shrinks with H0.
 
 Here, at the sizes where the wall is still elastic:
@@ -74,6 +74,12 @@ JOBS=jobs_vd.txt PER_TASK=$P sbatch --array=0-$(( (N+P-1)/P - 1 )) scripts/slurm
   the same ε, and rely more on the velocity-driven points below the ff range.
 - **S(q) of the moving wall.** It should follow the critical one up to ξ_v and cross over to the
   fast-flow regime (EW, ζ = 1/2) above it.
+
+## Status (2026-10-25)
+- **Stage ff done** (array 973476, 120 runs, 2026-10-24): results in `docs/vdrive.md` §5. Not
+  yet critical: the local β goes from 0.71 to 0.35 without a plateau, and S(q) shows that the
+  walls are critical over most of L only at ε ≲ 0.1. The ε range must extend below 0.05.
+- **Stage vd not launched.**
 
 ## Checked on vader (L = 256, miniature of the whole chain)
 - Both stages ran through `slurm_vdyn.sh`, and resubmission skips finished runs.
