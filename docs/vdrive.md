@@ -64,6 +64,11 @@ Only macroscopically flat walls are covered (no tilt). The SYCL port (`docs/inte
   - Snapshots `vdynfield_t<t>[_y<y0>]_seed<s>.bin`: the whole box, or with `--dump-band B` only
     the 2B rows around the wall, the first of them at lab row y0.
   - dt = 0.05 is safe (stable below ~0.19), and results do not change at dt = 0.025.
+  - `--reflect-y` (also in `main_vd.cu`): reflecting y boundary (the neighbor across it is the
+    site itself) instead of anti-periodic. Needed when deep trenches of the old phase are left
+    behind (Δ = 1.0 near threshold, §6): once the conveyor brings one down to row 0, the
+    anti-periodic seam nucleates a spurious domain of the new phase at the top row. Off by
+    default; without it every output is unchanged bit for bit.
 - **Analysis scripts** (`scripts/`):
 
   | script | input | output |

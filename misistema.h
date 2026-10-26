@@ -17,7 +17,10 @@
 // r(x, y + row_offset), a conveyor belt that keeps the wall inside the
 // box while it advances through fresh disorder (set_field_gradient,
 // shift_rows). With H0 = 0 and row_offset = 0 (the default) the code
-// does exactly what it did before.
+// does exactly what it did before. For moving walls the y boundary can
+// also be reflecting (set_reflecting_y): a deep trench of the old phase
+// that the conveyor brings down to row 0 then no longer couples to the
+// top row through the anti-periodic seam.
 #include <thrust/device_ptr.h>
 #include <thrust/device_malloc.h>
 #include <thrust/device_free.h>
@@ -173,6 +176,7 @@ struct Drive
 {
 	float h, grad, center;
 	long row_offset;
+	bool reflect_y; // y boundary: reflecting (zero gradient) instead of anti-periodic
 	__host__ __device__
 	float field(int y) const { return grad==0.0f ? h : h - grad*(float(y)-center); }
 };
@@ -226,9 +230,10 @@ struct velocityop
 
 		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
 		// wall spans the sample. The neighbor across the seam is "up"
-		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1.
-		if(y==0) phi_up*=-1;
-		if(y==Ly-1) phi_down*=-1;
+		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1. Reflecting:
+		// the site itself (for the VMC the fixed points are the same).
+		if(y==0) phi_up = drive.reflect_y ? phi_center : -phi_up;
+		if(y==Ly-1) phi_down = drive.reflect_y ? phi_center : -phi_down;
 
 		float laplacian = phi_up+phi_down+phi_right+phi_left-4.0*phi_center;
 		float r = site_disorder(x, y+drive.row_offset, Lx, disorder_seed);
@@ -317,9 +322,10 @@ struct vmcop
 
 		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
 		// wall spans the sample. The neighbor across the seam is "up"
-		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1.
-		if(y==0) phi_up*=-1;
-		if(y==Ly-1) phi_down*=-1;
+		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1. Reflecting:
+		// the site itself (for the VMC the fixed points are the same).
+		if(y==0) phi_up = drive.reflect_y ? phi_center : -phi_up;
+		if(y==Ly-1) phi_down = drive.reflect_y ? phi_center : -phi_down;
 
 		phi[center]=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
 			site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(y));
@@ -362,9 +368,9 @@ void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, Drive drive, int col
 	float phi_right=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,1), phi_left=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,-1);
 	float phi_center=phi[center];
 
-	// anti-periodic BC in y (see velocityop)
-	if(y==0) phi_up*=-1;
-	if(y==Ly-1) phi_down*=-1;
+	// anti-periodic or reflecting BC in y (see velocityop)
+	if(y==0) phi_up = drive.reflect_y ? phi_center : -phi_up;
+	if(y==Ly-1) phi_down = drive.reflect_y ? phi_center : -phi_down;
 
 	float new_phi=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
 		site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(y));
@@ -506,6 +512,7 @@ class System{
 		// area of the phi>0 phase stays continuous across shifts
 		float field_grad, field_center;
 		long row_offset;
+		bool reflect_y;
 		long long neg_discarded;
 		int total_time;
 		float tolres;
@@ -563,6 +570,7 @@ class System{
 			external_field=0.0;
 			field_grad=0.0f; field_center=0.0f;
 			row_offset=0; neg_discarded=0;
+			reflect_y=false;
 			total_time=0;
 			tolres=TOLRES;
 			last_converged=true;
@@ -663,7 +671,8 @@ class System{
 		long get_row_offset(){ return row_offset; }
 		// initial offset (before any shift): box row y holds lab row y+R
 		void set_row_offset(long R){ row_offset=R; neg_discarded=0; }
-		Drive drive(){ Drive d={external_field,field_grad,field_center,row_offset}; return d; }
+		void set_reflecting_y(bool r){ reflect_y=r; }
+		Drive drive(){ Drive d={external_field,field_grad,field_center,row_offset,reflect_y}; return d; }
 
 		// conveyor belt: moves the field n rows down, phi(x,y) <- phi(x,y+n),
 		// fills the top n rows with the phase above the wall (-1), and

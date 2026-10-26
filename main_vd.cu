@@ -40,7 +40,7 @@
 int main(int argc, char **argv)
 {
 	if(argc<8){
-		std::cout << "usage: " << argv[0] << " L Ly H0 h_u dW nsteps seed [--F0 f] [--recenter d] [--dump-every k]" << std::endl;
+		std::cout << "usage: " << argv[0] << " L Ly H0 h_u dW nsteps seed [--F0 f] [--recenter d] [--dump-every k] [--reflect-y]" << std::endl;
 		std::cout << "  L          lattice size Lx along the wall (multiple of 32)" << std::endl;
 		std::cout << "  Ly         box height along the motion (multiple of 32)" << std::endl;
 		std::cout << "  H0         field gradient (spring 2*H0, mass length sqrt(0.47/H0))" << std::endl;
@@ -51,6 +51,7 @@ int main(int argc, char **argv)
 		std::cout << "  --F0 f     initial drive (default h_u): the flat wall starts at Ly/2 with W = u + (f-h_u)/H0" << std::endl;
 		std::cout << "  --recenter d   shift the box once the wall is more than d rows above Ly/2 (default 64)" << std::endl;
 		std::cout << "  --dump-every k save the field every k steps" << std::endl;
+		std::cout << "  --reflect-y    reflecting y boundary instead of anti-periodic (deep trenches left behind)" << std::endl;
 		std::cout << "  --row-offset R the box starts at lab row R (default 0): the wall starts at lab row R+Ly/2" << std::endl;
 		return 1;
 	}
@@ -62,12 +63,14 @@ int main(int argc, char **argv)
 	float F0=h_u;
 	int recenter=64, dump_every=0;
 	long row_offset0=0;
+	bool reflect_y=false;
 	for(int i=8;i<argc;i++){
 		std::string flag(argv[i]);
 		if(flag=="--F0" && i+1<argc) F0=atof(argv[++i]);
 		else if(flag=="--recenter" && i+1<argc) recenter=atoi(argv[++i]);
 		else if(flag=="--dump-every" && i+1<argc) dump_every=atoi(argv[++i]);
 		else if(flag=="--row-offset" && i+1<argc) row_offset0=atol(argv[++i]);
+		else if(flag=="--reflect-y") reflect_y=true;
 		else{ std::cerr << "ERROR: unknown flag " << flag << std::endl; return 1; }
 	}
 	if(L%TILE!=0 || Ly%TILE!=0 || H0<=0 || recenter<TILE || 2*recenter+2*WALL_MARGIN>=Ly){
@@ -83,6 +86,7 @@ int main(int argc, char **argv)
 	sys.set_geometry(Ly/2,Ly-WALL_MARGIN,false);
 	sys.set_flat_interface();
 	sys.set_row_offset(row_offset0);
+	sys.set_reflecting_y(reflect_y);
 
 	double area_to_u=1.0/L;
 	long long area=sys.positive_area_lab();

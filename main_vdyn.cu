@@ -40,7 +40,7 @@
 int main(int argc, char **argv)
 {
 	if(argc<9){
-		std::cout << "usage: " << argv[0] << " L Ly H0 h_u v dt tmax seed [--tout t] [--F0 f] [--recenter d] [--row-offset R] [--dump-every k] [--dump-band B] [--dump-after t0] [--start-from file]" << std::endl;
+		std::cout << "usage: " << argv[0] << " L Ly H0 h_u v dt tmax seed [--tout t] [--F0 f] [--recenter d] [--row-offset R] [--dump-every k] [--dump-band B] [--dump-after t0] [--start-from file] [--reflect-y]" << std::endl;
 		std::cout << "  L          lattice size Lx along the wall (multiple of 32)" << std::endl;
 		std::cout << "  Ly         box height along the motion (multiple of 32)" << std::endl;
 		std::cout << "  H0         field gradient (spring 2*H0, mass length sqrt(0.47/H0)); 0: fixed force h_u" << std::endl;
@@ -52,6 +52,7 @@ int main(int argc, char **argv)
 		std::cout << "  --tout t       output interval (default 1)" << std::endl;
 		std::cout << "  --F0 f         initial drive (default h_u): W0 = u + (f-h_u)/H0" << std::endl;
 		std::cout << "  --recenter d   shift the box once the wall is more than d rows above Ly/2 (default 64)" << std::endl;
+		std::cout << "  --reflect-y    reflecting y boundary instead of anti-periodic (deep trenches left behind)" << std::endl;
 		std::cout << "  --row-offset R the box starts at lab row R (default 0)" << std::endl;
 		std::cout << "  --dump-every k save the field every k outputs" << std::endl;
 		std::cout << "  --dump-band B  save only the 2B rows around the wall (for long series)" << std::endl;
@@ -70,6 +71,7 @@ int main(int argc, char **argv)
 	int recenter=64, dump_every=0, dump_band=0;
 	double dump_after=0;
 	long row_offset0=0;
+	bool reflect_y=false;
 	std::string start_from;
 	for(int i=9;i<argc;i++){
 		std::string flag(argv[i]);
@@ -77,6 +79,7 @@ int main(int argc, char **argv)
 		else if(flag=="--F0" && i+1<argc) F0=atof(argv[++i]);
 		else if(flag=="--recenter" && i+1<argc) recenter=atoi(argv[++i]);
 		else if(flag=="--row-offset" && i+1<argc) row_offset0=atol(argv[++i]);
+		else if(flag=="--reflect-y") reflect_y=true;
 		else if(flag=="--dump-every" && i+1<argc) dump_every=atoi(argv[++i]);
 		else if(flag=="--dump-band" && i+1<argc) dump_band=atoi(argv[++i]);
 		else if(flag=="--dump-after" && i+1<argc) dump_after=atof(argv[++i]);
@@ -104,6 +107,7 @@ int main(int argc, char **argv)
 		sys.read_field_binary(fin);
 	}
 	sys.set_row_offset(row_offset0);
+	sys.set_reflecting_y(reflect_y);
 	sys.set_external_field(h_u);
 
 	if(fixed_force && (v!=0 || F0!=h_u)) std::cout << "WARNING: H0 = 0 (fixed force h = h_u): v and --F0 are ignored" << std::endl;
@@ -115,7 +119,7 @@ int main(int argc, char **argv)
 
 	long nsteps=lround(tmax/dt), nout=std::max(1L,lround(tout/dt));
 	std::cout << "Lx=" << L << " Ly=" << Ly << " H0=" << H0 << " h_u=" << h_u << " v=" << v << " dt=" << dt
-		<< " tmax=" << tmax << " seed=" << seed;
+		<< " tmax=" << tmax << " seed=" << seed << (reflect_y ? " reflect_y" : "");
 	if(fixed_force) std::cout << " (fixed force)" << std::endl;
 	else std::cout << " L_m=" << sqrt(2*sqrt(2.)/3/(2*H0)) << std::endl;
 
@@ -124,7 +128,7 @@ int main(int argc, char **argv)
 	else sprintf(filename,"vdyn_v%g_seed%lu.dat",v,seed);
 	std::ofstream out(filename);
 	out << "# Lx=" << L << " Ly=" << Ly << " H0=" << H0 << " h_u=" << h_u << " v=" << v << " dt=" << dt
-		<< " tout=" << nout*dt << " seed=" << seed << " AMPDIS=" << AMPDIS << " AX=" << AX << " AY=" << AY << std::endl;
+		<< " tout=" << nout*dt << " seed=" << seed << " AMPDIS=" << AMPDIS << " AX=" << AX << " AY=" << AY << (reflect_y ? " reflect_y" : "") << std::endl;
 	out << (fixed_force ? "# t u" : "# t W u F") << std::endl;
 	out.precision(10);
 
