@@ -21,9 +21,17 @@
 // down by a multiple of 32 rows. W and u are reported in the lab frame.
 //
 // Output, vd_seed<seed>.dat, one line per step:
-//   step W u F S sweeps converged
+//   step W u F S sweeps converged ell height Sdown n_mv depth
 // u = (area of the phi>0 phase)/Lx - 1/2 (the wall lies half a row above
 // the last phi>0 row), S = change of that area (sites) over the step.
+// The geometry of the step (System::avalanche_geometry, from the field
+// before and after the relaxation): ell = columns with a flipped site
+// (lateral extent of the avalanche), height = rows between its lowest and
+// highest flipped site (+1), Sdown = sites that went from phi>0 to
+// phi<=0 (0 if no-passing holds, so S is the number of flipped sites);
+// and the wall after the step: n_mv = multivalued columns (2 or more
+// branches: overhangs or bubbles), depth = largest distance between the
+// first and last wall crossing of a column (the deepest overhang/bay).
 // With --dump-every k, the field every k steps as raw float32
 // (vdfield_step<step>_seed<seed>.bin, Lx*Ly, box frame).
 #include <iostream>
@@ -102,12 +110,13 @@ int main(int argc, char **argv)
 	std::ofstream out(filename);
 	out << "# Lx=" << L << " Ly=" << Ly << " H0=" << H0 << " h_u=" << h_u << " dW=" << dW << " seed=" << seed
 		<< " AMPDIS=" << AMPDIS << " AX=" << AX << " AY=" << AY << std::endl;
-	out << "# step W u F S sweeps converged" << std::endl;
+	out << "# step W u F S sweeps converged ell height Sdown n_mv depth" << std::endl;
 	out.precision(10);
 
 	for(long step=0;step<=nsteps;step++){
 		if(step>0) W+=dW;
 		sys.set_field_gradient(H0,float(W-sys.get_row_offset()));
+		sys.save_state();
 		int sweeps=sys.find_next_metastable(CHOP,true);
 		if(sys.escaped()){
 			std::cerr << "ERROR: step " << step << ": the wall reached the top of the box (Ly too small, or h_u/F0 too large)" << std::endl;
@@ -116,7 +125,9 @@ int main(int argc, char **argv)
 		long long new_area=sys.positive_area_lab();
 		u=new_area*area_to_u-0.5;
 		double F=h_u+H0*(W-u);
-		out << step << " " << W << " " << u << " " << F << " " << new_area-area << " " << sweeps << " " << sys.converged() << "\n";
+		AvalancheGeometry g=sys.avalanche_geometry();
+		out << step << " " << W << " " << u << " " << F << " " << new_area-area << " " << sweeps << " " << sys.converged()
+			<< " " << g.ell << " " << g.height << " " << g.down << " " << g.n_mv << " " << g.depth_max << "\n";
 		area=new_area;
 
 		if(dump_every>0 && step%dump_every==0){

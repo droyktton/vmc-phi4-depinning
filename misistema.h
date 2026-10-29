@@ -461,6 +461,61 @@ struct row_if_sign
 	int operator()(int i){ return phi[i]*sign>0 ? i/Lx : neutral; }
 };
 
+// sign changes along a column closer than this many rows count as one
+// crossing of the wall (a single-site sliver of the other sign is not a
+// branch), see column_geometry
+#ifndef GEOM_MERGE
+#define GEOM_MERGE 2
+#endif
+
+// per column x (one thread each, tilt = 0): the sites whose sign changed
+// from saved to phi (up: phi>0 now and not before, down: the reverse),
+// the first and last row where one did, and the wall along the column
+// now: its crossings (sign changes between rows y-1 and y, the seam pair
+// Ly-1|0 excluded) merged into branches when closer than GEOM_MERGE rows,
+// and the distance between the first and last crossing. Writes 6 ints at
+// out[6*x]: up, down, ymin, ymax, branches, depth (ymin = Ly, ymax = -1
+// without flips).
+struct column_geometry
+{
+	const float *phi, *saved;
+	int *out;
+	int Lx, Ly;
+	column_geometry(const float *_phi, const float *_saved, int *_out, int _Lx, int _Ly):
+	phi(_phi),saved(_saved),out(_out),Lx(_Lx),Ly(_Ly){};
+	__device__
+	void operator()(int x)
+	{
+		int up=0, down=0, ymin=Ly, ymax=-1, branches=0, first=-1, last=-1;
+		bool s_prev=false;
+		for(int y=0;y<Ly;y++){
+			bool s=phi[x+Lx*y]>0, s_old=saved[x+Lx*y]>0;
+			if(s!=s_old){
+				if(s) up++; else down++;
+				ymin=min(ymin,y); ymax=max(ymax,y);
+			}
+			if(y>0 && s!=s_prev){
+				if(last<0 || y-last>GEOM_MERGE) branches++;
+				if(first<0) first=y;
+				last=y;
+			}
+			s_prev=s;
+		}
+		int *o=out+6*x;
+		o[0]=up; o[1]=down; o[2]=ymin; o[3]=ymax; o[4]=branches; o[5]=(first<0 ? 0 : last-first);
+	}
+};
+
+// what changed in one quasi-static step (System::avalanche_geometry)
+struct AvalancheGeometry
+{
+	long long up, down; // sites that became phi>0, phi<=0 (up-down = S; down>0 breaks no-passing)
+	int ell;            // columns with a flipped site: lateral extent of the avalanche
+	int height;         // rows between the lowest and highest flipped site, +1 (0 without flips)
+	int n_mv;           // multivalued columns now (2 or more wall branches: overhangs, bubbles)
+	int depth_max;      // largest distance, in rows, between the first and last crossing of a column
+};
+
 struct is_positive
 {
 	__host__ __device__
@@ -491,6 +546,7 @@ class System{
 		thrust::device_ptr<float> d_saved; // a copy of phi (save_state/restore_state)
 		thrust::device_ptr<float> d_snap;  // phi some sweeps ago (find_next_metastable)
 		thrust::device_vector<int> d_wall_site_indices; // wall-site indices (detect_wall), sized to fit
+		thrust::device_vector<int> d_colgeo; // per-column output of column_geometry (avalanche_geometry)
 		// active tiles (see vmc_tiles_kernel)
 		bool use_tiles;
 		float tile_eps;
@@ -704,6 +760,30 @@ class System{
 		{
 			long long n=thrust::count_if(d_phi,d_phi+L2,is_positive());
 			return n+(long long)row_offset*Lx-neg_discarded;
+		}
+
+		// the change of phi since save_state() (no shift_rows in between)
+		// and the wall's branches now, column by column (column_geometry;
+		// assumes tilt = 0)
+		AvalancheGeometry avalanche_geometry()
+		{
+			d_colgeo.resize(6*Lx);
+			thrust::for_each(thrust::make_counting_iterator(0), thrust::make_counting_iterator(Lx),
+				column_geometry(phi_ptr, thrust::raw_pointer_cast(&d_saved[0]),
+					thrust::raw_pointer_cast(d_colgeo.data()), Lx, Ly));
+			std::vector<int> h(6*Lx);
+			thrust::copy(d_colgeo.begin(), d_colgeo.end(), h.begin());
+			AvalancheGeometry g={0,0,0,0,0,0};
+			int ymin=Ly, ymax=-1;
+			for(int x=0;x<Lx;x++){
+				const int *c=&h[6*x];
+				g.up+=c[0]; g.down+=c[1];
+				if(c[0]+c[1]>0){ g.ell++; ymin=std::min(ymin,c[2]); ymax=std::max(ymax,c[3]); }
+				if(c[4]>=2) g.n_mv++;
+				g.depth_max=std::max(g.depth_max,c[5]);
+			}
+			g.height=(ymax<0 ? 0 : ymax-ymin+1);
+			return g;
 		}
 		int get_L(){ return Lx; }
 		int get_Ly(){ return Ly; }
