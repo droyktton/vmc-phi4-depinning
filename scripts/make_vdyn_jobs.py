@@ -38,6 +38,9 @@ p.add_argument('--hc', type=float, default=0.01339, help='threshold estimate (bi
 p.add_argument('--eps', default='0.05 0.1 0.2 0.4 0.8 1.6', help='fixed-force fields h = hc (1 + eps)')
 p.add_argument('--H0s', default='3e-5 1e-5 3e-6', help='springs of the velocity-driven runs')
 p.add_argument('--extra-v', default='0.5 0.25', help='extra v below the ff range, as fractions of the smallest ff v')
+p.add_argument('--vmax', type=float, default=float('inf'), help='stage vd: only ff v up to this one (the extra v always go)')
+p.add_argument('--fit-points', type=int, default=0, help='stage vd: fit F0(v) to the N slowest ff fields only (0: all)')
+p.add_argument('--extra-args', default='', help='flags appended to every run, e.g. --reflect-y')
 p.add_argument('--seeds', type=int, default=10, help='seeds of stage ff')
 p.add_argument('--vd-seeds', type=int, default=5, help='seeds of stage vd (<F> self-averages at fixed v)')
 p.add_argument('--dump-seeds', type=int, default=5)
@@ -61,7 +64,7 @@ def line(outdir, L, H0, h_u, v, T, seed, extra=''):
         every = max(1, NOUT // 2 // args.nsnap)
         dump = f' --dump-every {every} --dump-after {T / 2:g} --dump-band {bands[L]}'
     return (f'{outdir} {args.binary} {L} {Lys[L]} {H0:g} {h_u:.6g} {v:.6g} {args.dt:g} {T:.6g} {seed}'
-            f' --tout {tout:.6g}{extra}{dump}')
+            f' --tout {tout:.6g}{extra}{dump}' + (f' {args.extra_args}' if args.extra_args else ''))
 
 
 def v_guess(h):
@@ -89,16 +92,18 @@ else:
                 a = a[len(a) // 2:]
                 if len(a) > 10:
                     vs.append(np.polyfit(a[:, 0], a[:, 1], 1)[0])
-            if vs and np.mean(vs) > 0:
+            # a field where some seed got stuck is not a point of v(h): its mean mixes v = 0 in
+            if vs and min(vs) > 0.1 * np.median(vs):
                 pts.append((h, np.mean(vs)))
         if len(pts) < 3:
             raise SystemExit(f'L={L}: stage ff incomplete ({len(pts)} fields with v > 0)')
-        pts = np.array(pts)
+        pts = np.array(sorted(pts))
         # v = A (h - hc)^b over the ff points, for F0 and mu = dv/dh of the extra v
-        b, lnA = np.polyfit(np.log(pts[:, 0] - args.hc), np.log(pts[:, 1]), 1)
+        fit = pts[:args.fit_points] if args.fit_points else pts   # pts sorted by h, slowest first
+        b, lnA = np.polyfit(np.log(fit[:, 0] - args.hc), np.log(fit[:, 1]), 1)
         h_of_v = lambda v: args.hc + (v / np.exp(lnA)) ** (1 / b)
         vmin = pts[:, 1].min()
-        targets = [(v, h) for h, v in pts] + [(f * vmin, h_of_v(f * vmin)) for f in map(float, args.extra_v.split())]
+        targets = [(v, h) for h, v in pts if v <= args.vmax] + [(f * vmin, h_of_v(f * vmin)) for f in map(float, args.extra_v.split())]
         for H0 in [float(x) for x in args.H0s.split()]:
             for v, h in targets:
                 mu = b * v / (h - args.hc)  # dv/dh of the fit
