@@ -8,6 +8,8 @@ into results/pilot_qs/:
   pilot_correlator.png    connected correlator C(w)/C(0) of F
   pilot_L512_vs_L1024.png P(S), <F>, sd(F) at equal L_m for L = 512 and 1024
   compare_dW.png          P(S) for dW = 0.5, 0.1, 0.02 over the same stretch of W
+  pilot_Sq.png            S(q) at threshold and its local slope (needs the vdrive_sq.py
+                          outputs results/pilot_qs/Sq_D<D>_H<H>_dW0.5/, see section 7)
 
   python3 scripts/pilot_qs_plots.py   (from the repository root)
 """
@@ -101,3 +103,33 @@ for k,D in enumerate(['0.3','1.5']):
         ax[k].loglog(c[h>0],dens[h>0],'o-',ms=4,color=cols_dW[dW],label=f'dW={dW} ({len(Sb)})')
     ax[k].set_title(f'Δ={D}, L=1024, L_m=125, W∈[560,1510]'); ax[k].set_xlabel('S (sitios)'); ax[k].set_ylabel('P(S), S≥10'); ax[k].legend(fontsize=8)
 fig.tight_layout(); fig.savefig(OUT+'/compare_dW.png',dpi=130); plt.close()
+
+# 7. S(q) at threshold (quasi-static dumps, L = 1024), from scripts/vdrive_sq.py:
+#   python3 scripts/vdrive_sq.py data/pilot_qs_L1024/D<D>_H<H>_dW0.5 --L 1024 --tmin 400 --outdir results/pilot_qs/Sq_D<D>_H<H>_dW0.5
+def logbin(q, S, nb=24):
+    q, S = q[q > 0], S[q > 0]
+    e = np.logspace(np.log10(q[0]), np.log10(q[-1]) + 1e-9, nb + 1)
+    i = np.digitize(q, e) - 1
+    keep = [k for k in range(nb) if np.any(i == k)]
+    return (np.array([np.exp(np.log(q[i == k]).mean()) for k in keep]),
+            np.array([np.exp(np.log(S[i == k]).mean()) for k in keep]))
+fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
+for D in ['0.3', '1.0', '1.5']:
+    for H in ['3e-5', '1e-5']:
+        f = f'{OUT}/Sq_D{D}_H{H}_dW0.5/Sq_L1024.dat'
+        if not glob.glob(f):
+            continue
+        q, S = np.loadtxt(f, usecols=(0, 1), unpack=True)
+        qb, Sb = logbin(q, S)
+        ax[0].loglog(qb, Sb * qb**3.5, LS[H], color=C[D], label=f'Δ={D}, L_m={LM[H]}')
+        l = 2 * np.pi / np.sqrt(qb[1:] * qb[:-1])
+        ax[1].semilogx(l, -np.diff(np.log(Sb)) / np.diff(np.log(qb)), LS[H], color=C[D], label=f'Δ={D}, L_m={LM[H]}')
+for y, t in [(4, 'Larkin'), (3.5, 'qEW'), (2, 'EW')]:
+    ax[1].axhline(y, color='0.5', ls=':', lw=0.8)
+    ax[1].text(1.02, y, t, transform=ax[1].get_yaxis_transform(), fontsize=7, va='center', color='0.4')
+for lm in (125, 217):
+    ax[1].axvline(lm, color='0.7', lw=0.8)
+ax[0].set_xlabel('q'); ax[0].set_ylabel('S(q) q^3.5'); ax[0].set_title('S(q) en el umbral, cuasiestático, L=1024'); ax[0].legend(fontsize=7)
+ax[1].set_xlabel('l = 2π/q  (líneas grises: L_m)'); ax[1].set_ylabel('−d ln S / d ln q  (= 1+2ζ)'); ax[1].set_ylim(0, 6)
+ax[1].set_title('pendiente local'); ax[1].legend(fontsize=7)
+fig.tight_layout(); fig.savefig(OUT + '/pilot_Sq.png', dpi=130); plt.close()

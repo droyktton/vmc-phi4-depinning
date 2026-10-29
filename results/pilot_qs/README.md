@@ -43,6 +43,30 @@ The cutoff S_m = ⟨S²⟩/2⟨S⟩ ~ L_m^{1+ζ}:
 
 These come from only two L_m and 100–500 avalanches each, so they are a hint to be tested in production.
 
+τ itself cannot be told apart between Δ with this statistics. Maximum-likelihood fits of a truncated
+power law give τ between 0.8 and 1.1 for every Δ. The value depends more on the fitting window than on
+Δ, with errors of 0.05–0.1 from 40–300 avalanches per window. Windows that reach S_m give τ < 1
+because they include the bump before the cutoff.
+
+Two other features are robust:
+- 80–90 % of all events are flips of 1–9 sites, at every Δ.
+- At Δ = 1.5, P(S) is flatter between S = 10 and 100.
+
+For production: telling τ apart needs ~10⁴ avalanches with S ≥ 10 per point, and a collapse in S/S_m
+rather than a fixed window.
+
+## S(q) at threshold (L = 1024)
+![S(q)](pilot_Sq.png)
+
+S(q) comes from the 19 dumped metastable configurations of each run, through `scripts/vdrive_sq.py`
+(univalued profile of the φ = 0 contour).
+
+- At Δ = 0.3, S(q) q^3.5 is flat between l ≈ 10 and L_m: the local slope is ≈ 3.5–4 (qEW/Larkin).
+- At Δ ≥ 1 the slope drops to ~2–3 up to L_m (ζ ≈ 0.5–1). This agrees with the moving walls at Δ = 1
+  ([`../vdrive_D1.0`](../vdrive_D1.0)) and goes the same way as the cutoff exponent.
+
+It is noisy: one seed and 19 configurations per run.
+
 ## Force–force correlator
 ![correlator](pilot_correlator.png)
 
