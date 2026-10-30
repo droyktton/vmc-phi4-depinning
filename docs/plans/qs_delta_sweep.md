@@ -37,9 +37,17 @@ The data are on the cluster in `data/pilot_qs/`, and in `data/pilot_qs` (vader, 
 Avalanche rates (S ≥ 10, L = 1024) are about 0.26 per row of W at Δ = 0.3 and about 0.12 at Δ = 1.5.
 With dW = 0.5, 10⁴ avalanches therefore take ~10⁵ steps, which is a few GPU-hours per seed.
 
-A first hint, from one seed and 100–500 avalanches: between L_m = 125 and 217, S_m grows as L_m^{2.1} at
-Δ = 0.3 (ζ ≈ 1.1, elastic) but as L_m^{1.05} at Δ = 1.5 (ζ ≈ 0). At Δ = 1.5 the drive shows clean
-stick-slip with system-spanning avalanches.
+At Δ = 1.5 the drive shows clean stick-slip with system-spanning avalanches. The S_m(L_m) exponent is
+not usable with a few hundred avalanches. A first run gave L_m^{1.05} at Δ = 1.5; longer runs gave
+L_m^{2.4}.
+
+**Avalanche geometry (2026-10-30)** ([`results/pilot_qs`](../../results/pilot_qs/README.md)):
+- d_f ≈ 1.9–2.0 (S ~ ℓ^{d_f}) at every Δ.
+- The anisotropy exponent χ (height ~ ℓ^χ) grows with Δ: about 0.4–0.6 at Δ = 0.3, 0.56–0.75 at
+  Δ = 1.0, and ≈ 0.8 at Δ = 1.5.
+- At Δ = 1.0, the avalanches that create overhangs have a flatter P(S).
+
+**χ(Δ) is the geometric observable to follow in production.**
 
 ## Production protocol
 
@@ -47,7 +55,7 @@ stick-slip with system-spanning avalanches.
 |---|---|
 | Δ | 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.85, 1.0, 1.2. Capped at 1.2 until h_nuc(Δ) is known (bubbles, below). |
 | H0 | 1e-4, 3e-5, 1e-5 (L_m ≈ 70, 125, 217); add 3e-6 (L_m ≈ 400) at a few Δ if time allows |
-| L × Ly | 1024 × 1024, `--reflect-y` (L ≥ 4 L_m except at H0 = 3e-6) |
+| L × Ly | 1024 × 1024, `--reflect-y` (L ≥ 4 L_m except at H0 = 3e-6). **Ly = 2048 for Δ ≥ 1 with H0 ≤ 1e-5:** at Δ = 1.5, L_m = 217, single avalanches span 689 rows and the wall hit the top of a 1024 box. At Δ = 1.0, bays already reach 392 rows. |
 | dW | 0.5 |
 | h_u | ≈ h_d(Δ, L) from bisection; it only shortens the transient. Use h_est = 0.008 (Δ/0.2)^{4/3} if unknown (0.0663 measured at Δ = 1). |
 | seeds | 5 |
@@ -69,7 +77,14 @@ A run, from its output directory:
 $ROOT/phi4vmc_vd_D0.85 1024 1024 3e-5 <h_u> 0.5 <nsteps> <seed> --reflect-y --dump-every <k>
 ```
 
-It writes `vd_seed<s>.dat` (`step W u F S sweeps converged`) and `vdfield_step<k>_seed<s>.bin`.
+It writes `vd_seed<s>.dat` and `vdfield_step<k>_seed<s>.bin`. The columns of `vd_seed<s>.dat` are
+`step W u F S sweeps converged ell height Sdown n_mv depth`; the last five, the avalanche geometry and
+the wall's multivalued columns, are described at the top of `main_vd.cu`.
+
+To compile on rocks (10.73.25.223, GPUs on compute-6-*, no queue), load
+`module load gcc/11.1.0-gcc-8.2.0-3lbhz3n cuda/12.2.1-gcc-11.1.0-fvljoe5`: the system gcc 4.8 does not
+work with CUDA 12. The GTX TITAN X on compute-6-2 was about 25× slower than the RTX 2080 Ti on
+compute-6-4.
 
 For job arrays, `scripts/slurm_vdyn.sh` reads the seed from field 9 of each command, which is the
 `main_vdyn.cu` argument order. For `main_vd.cu` the seed is field 8: either make the field
@@ -82,6 +97,10 @@ configurable, or use the small runner of the pilot (`data/pilot_qs/slurm_pilot.s
   with a collapse P(S) S^τ vs S/S_m.
 - S_m(L_m) gives d + ζ.
 - ζ from geometry: `scripts/vdrive_sq.py` reads the `vdfield_step*` dumps directly.
+- Avalanche geometry: `scripts/pilot_geo_plots.py` (adapt its paths) gives
+  - d_f from S ~ ℓ^{d_f};
+  - χ from height ~ ℓ^χ;
+  - P(S) split by whether the avalanche raises n_mv.
 - Δ(w): rescale L·C(w) by Δ(0) and by its width, then compare the shapes across Δ.
 
 ## Checks for every run
