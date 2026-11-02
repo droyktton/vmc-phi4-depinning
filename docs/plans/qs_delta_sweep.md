@@ -20,8 +20,9 @@ criterion is therefore L_m vs l_o(Δ): l_o ≈ 1500 at Δ = 0.3 and ≈ 100 at �
 - If Δ_c stays put, it is a transition.
 
 ## Pilot (2026-10-29): what it fixed
-The data are on the cluster in `data/pilot_qs/`, and in `data/pilot_qs` (vader, L = 512) and
-`data/pilot_qs_L1024` (cluster, L = 1024) in this worktree. All runs are one seed, with H0 = 3e-5
+The data are on the cluster in `~/Codigos/vmc-phi4-vdrive/data/pilot_qs/`, and on vader in
+`~/Codigos/vmc-phi4-vdrive/data/pilot_qs` (L = 512) and `data/pilot_qs_L1024` (copied from the
+cluster, L = 1024). All runs are one seed, with H0 = 3e-5
 (L_m = 125) unless stated.
 
 | check | result |

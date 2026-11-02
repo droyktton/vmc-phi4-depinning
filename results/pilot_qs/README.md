@@ -9,7 +9,7 @@ The runs:
 - all with `--reflect-y`, and with H0 = 3e-5 (L_m = 125) unless stated otherwise.
 
 The figures come from `python3 scripts/pilot_qs_plots.py`, which reads `data/pilot_qs` and
-`data/pilot_qs_L1024`. The data are not in git; on the cluster they are in `data/pilot_qs`.
+`data/pilot_qs_L1024`. The data are not in git; they are in `~/Codigos/vmc-phi4-vdrive/data/` on vader and on the cluster.
 
 Colours: Δ = 0.3 blue, Δ = 1.0 orange, Δ = 1.5 green. Solid lines are L_m = 125, dashed lines L_m = 217.
 
@@ -99,7 +99,7 @@ not change S.
 ## Avalanche geometry (2026-10-30)
 These runs use the geometry columns of `main_vd.cu` (`ell height Sdown n_mv depth`, commit 011e2e2).
 They are L = 1024, dW = 0.5, 8000 steps, one seed, Δ = 0.3, 1.0, 1.5 × H0 = 3e-5, 1e-5, run on rocks
-(compute-6-4, RTX 2080 Ti). The data are in `data/pilot_geo` (not in git), the figures come from
+(compute-6-4, RTX 2080 Ti). The data are in `data/pilot_geo` (not in git; `~/Codigos/vdrive_geo` on rocks and `~/Codigos/vmc-phi4-vdrive` on vader), the figures come from
 `python3 scripts/pilot_geo_plots.py`, and the fits are in [`geo_fits.txt`](geo_fits.txt). The fits use
 avalanches with S ≥ 10 and 8 ≤ ℓ ≤ L_m.
 

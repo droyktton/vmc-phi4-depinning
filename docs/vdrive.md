@@ -1,8 +1,12 @@
 # Velocity-driven and finite-velocity drivers
 
-Branch `vdrive`. Two more drivers on top of the force-driven bisection of `main.cu`. They share
-`misistema.h`, and with the new options left at their defaults the force-driven solver is
-unchanged bit for bit.
+Two more drivers on top of the force-driven bisection of `main.cu`. They share `misistema.h`, and
+with the new options left at their defaults the force-driven solver is unchanged bit for bit.
+They were developed on a branch `vdrive`, merged into `main` on 2026-11-02 (288ab3e).
+
+The run data are not in git. They live in the old `vdrive` worktrees, under `data/`:
+`~/Codigos/vmc-phi4-vdrive` on the cluster (10.73.25.233) and on vader, and
+`~/Codigos/vdrive_geo` on rocks (10.73.25.223) for the avalanche-geometry pilot.
 
 | driver | build | dynamics | drive | measures |
 |---|---|---|---|---|
@@ -84,7 +88,7 @@ Only macroscopically flat walls are covered (no tilt). The SYCL port (`docs/inte
 ## 3. Validation
 On vader (GTX 1080), 2026-10-22/23.
 
-- **Regression.** The force-driven solver of the branch gives the same h_d and critical field,
+- **Regression.** The force-driven solver of the new drivers' `misistema.h` gives the same h_d and critical field,
   bit for bit, as `main`: L = 256, Δ = 0.3, 3 seeds, 1×1 and 8×1 blocks. Each later change
   (Euler, fixed-force mode, band dumps) left the earlier quasi-static and Euler outputs
   bit-identical.
