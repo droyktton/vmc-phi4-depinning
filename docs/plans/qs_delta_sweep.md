@@ -55,13 +55,29 @@ L_m^{2.4}.
 | parameter | value |
 |---|---|
 | Δ | 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.85, 1.0, 1.2. Capped at 1.2 until h_nuc(Δ) is known (bubbles, below). |
-| H0 | 1e-4, 3e-5, 1e-5 (L_m ≈ 70, 125, 217); add 3e-6 (L_m ≈ 400) at a few Δ if time allows |
-| L × Ly | 1024 × 1024, `--reflect-y` (L ≥ 4 L_m except at H0 = 3e-6). **Ly = 2048 for Δ ≥ 1 with H0 ≤ 1e-5:** at Δ = 1.5, L_m = 217, single avalanches span 689 rows and the wall hit the top of a 1024 box. At Δ = 1.0, bays already reach 392 rows. |
+| H0 | 1e-4, 3e-5, 1e-5 (L_m ≈ 70, 125, 217) at L = 1024; **3e-6 (L_m ≈ 400) at L = 2048**, smallest Δ first (see below) |
+| L × Ly | 1024 × 1024 for H0 ≥ 1e-5 and 2048 × 2048 for H0 = 3e-6, `--reflect-y`. Keep L ≳ 4 L_m, so that the cutoff is set by the spring and not by L. **Ly = 2048 for Δ ≥ 1 with H0 ≤ 1e-5:** at Δ = 1.5, L_m = 217, single avalanches span 689 rows and the wall hit the top of a 1024 box. At Δ = 1.0, bays already reach 392 rows. |
 | dW | 0.5 |
 | h_u | ≈ h_d(Δ, L) from bisection; it only shortens the transient. Use h_est = 0.008 (Δ/0.2)^{4/3} if unknown (0.0663 measured at Δ = 1). |
 | seeds | 5 |
 | length | ≥ 10⁴ avalanches with S ≥ 10 per (Δ, H0) in total. For C(w), a W travel of ≥ 50 correlation lengths of C(w) (60–100 rows at L_m = 125). Take the larger of the two. |
 | dumps | `--dump-every k` with ~100 configurations per seed (full box: 4 MB each at 1024²) |
+
+**Why larger systems (2026-11-02).** Two reasons push towards larger L_m, and so larger L:
+- *Small Δ:* the Larkin length L_c ~ Δ^{-2/3} grows as Δ decreases, and qEW only shows once
+  L_c ≪ L_m. In the pilot, χ at Δ = 0.3 still grew between L_m = 125 and 217, so these L_m are not yet
+  asymptotic there. This is where L = 2048, H0 = 3e-6 matters most.
+- *Large Δ:* the crossover is controlled by L_m/l_o(Δ), and the plastic side needs L_m ≫ l_o.
+
+| L | largest L_m with L ≳ 4 L_m | H0 |
+|---|---|---|
+| 1024 | ~250 | ≥ 1e-5 |
+| 2048 | ~400–500 | 3e-6 |
+| 4096 | ~1000 | 5e-7 |
+
+A step at L = 2048 costs about 4× one at 1024 (∝ L·Ly), but the avalanche rate per row of W also
+grows ∝ L, which pays back part of it. Ly must grow with L_m too: single avalanches already span 689
+rows at Δ = 1.5, L_m = 217.
 
 Build one binary per Δ on the frontend (it builds for every architecture of the gpu partition):
 
@@ -98,10 +114,15 @@ configurable, or use the small runner of the pilot (`data/pilot_qs/slurm_pilot.s
   with a collapse P(S) S^τ vs S/S_m.
 - S_m(L_m) gives d + ζ.
 - ζ from geometry: `scripts/vdrive_sq.py` reads the `vdfield_step*` dumps directly.
-- Avalanche geometry: `scripts/pilot_geo_plots.py` (adapt its paths) gives
-  - d_f from S ~ ℓ^{d_f};
-  - χ from height ~ ℓ^χ;
+- **Avalanche geometry (main observables, together with τ):** with the columns `S` (area, flipped
+  sites), `ell` (lateral extent) and `height`, pool the avalanches with S ≥ 10 of all seeds of a
+  (Δ, H0) into one cloud and get
+  - the fractal dimension d_f from S ~ ℓ^{d_f};
+  - the anisotropy χ from height ~ ℓ^χ (the observable that changed with Δ in the pilot);
   - P(S) split by whether the avalanche raises n_mv.
+
+  Fit over 8 ≤ ℓ ≤ L_m and compare L_m at fixed Δ. `scripts/pilot_geo_plots.py` (adapt its paths) does
+  all three.
 - Δ(w): rescale L·C(w) by Δ(0) and by its width, then compare the shapes across Δ.
 
 ## Checks for every run
