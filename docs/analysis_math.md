@@ -746,7 +746,10 @@ What the figure shows:
   needed for its curvature.
 - **Blocks elongated along the motion ($AY>AX$: blue, orange, green)**
   stay within 3 % of 1 and, if anything, rise with $\lvert s\rvert$
-  ($\lambda<0$), but by at most 1.3σ: no conclusion yet.
+  ($\lambda<0$), but by at most 1.3σ: no conclusion yet. At $\Delta=0.2$
+  (`results/aniso_neg/`), 1×8 gives $h_d''/h_d = -0.9\pm0.6$, compatible
+  with zero, and 1×32 locks the flat wall onto the block grid, with a cusp
+  in $h_d(s)$ at $s=0$ rather than a KPZ term: no $\lambda<0$ is found.
 - **The square 2×2 control (purple) is flat**, like the isotropic case.
   The effect therefore comes from the rectangular shape of the blocks,
   not from correlating the disorder or from the lattice.
@@ -854,6 +857,21 @@ So the threshold scales with $1/\nu = 0.685\pm0.02$ at $L\le8192$, between
 qKPZ (0.577, $6\sigma$) and qEW (0.75, $3.5\sigma$), while the geometry of
 the wall below is that of qKPZ.
 
+**Spread rescaled by the qKPZ exponent** (`scripts/sigma_scaled.py`):
+
+![sigma(h_d) L^0.577 vs L, 8x1 blocks](../results/aniso_weak/hd_variance/sigma_L0577.png)
+
+| $L$ | 256 | 512 | 1024 | 2048 | 4096 | 8192 |
+|---|---|---|---|---|---|---|
+| $\sigma L^{0.577}$ | 0.0331(22) | 0.0275(18) | 0.0265(15) | 0.0273(14) | 0.0243(12) | 0.0211(10) |
+
+If the spread scaled with the qKPZ exponent this would be flat. It is flat
+within the errors from $L=512$ to 2048, and then falls: at $L=8192$ it is
+$3\sigma$ below $L=1024$. The point at $L=256$ is high, inside the
+crossover ($\ell_p\approx300$). The departure from flat grows with $L$,
+which is the opposite of a slow approach to qKPZ, although with two points
+beyond 2048 it is only a $3\sigma$ effect.
+
 **Roughness** (`results/aniso_weak/prod_roughness/`, estimators and bias
 of §5.6):
 
@@ -930,6 +948,39 @@ the curvature at $s=0$, which is why it overshoots 1 there. $\lambda$
 neither grows nor saturates with $L$ visibly: it is $L$-independent
 within the errors.
 
+**Finite-size scaling of the curvature** (`scripts/tilt_scaling.py`). With
+$`f_c(L,s)-f_c(L,0) = f_c\,L^{-1/\nu}\,g(sL^{1-\zeta})`$ and $g(x)\sim x^2$
+at small $x$,
+
+```math
+C(L,s) \equiv -\frac{2}{s^2}\left[\frac{\langle f_c(L,s)\rangle}{\langle f_c(L,0)\rangle}-1\right]
+\sim L^{2(1-\zeta)-1/\nu},
+```
+
+which is $+0.16$ for qKPZ, $+0.055$ for $\zeta=0.63$ with the measured
+$1/\nu=0.685$, and $-1.25$ for qEW (where, in addition, $\lambda=0$). The
+tilt runs use seeds 1–30 at every $s$, the same as at $s=0$, so the ratios
+are paired over seeds (bootstrap errors), with $\pm s$ averaged:
+
+![C(L,s) and collapse, 8x1 blocks](../results/aniso_weak/tilt/C_tilt.png)
+
+| $\lvert s\rvert$ | $C(512)$ | $C(1024)$ | $C(2048)$ | slope of $\ln C$ vs $\ln L$ |
+|---|---|---|---|---|
+| 0.05 | 17.6 ± 5.4 | 11.6 ± 4.2 | 15.2 ± 2.8 | −0.06 ± 0.25 |
+| 0.1 | 15.5 ± 1.8 | 13.2 ± 0.9 | 14.5 ± 0.7 | +0.01 ± 0.08 |
+| 0.2 | 9.8 ± 0.4 | 10.0 ± 0.2 | 10.3 ± 0.2 | +0.04 ± 0.03 |
+| 0.3 | 7.0 ± 0.2 | 7.1 ± 0.1 | 7.3 ± 0.1 | +0.04 ± 0.02 |
+
+The law holds only for $sL^{1-\zeta}\ll1$; here $sL^{0.37}$ runs from
+about 0.5 to 5, so only $\lvert s\rvert\lesssim0.1$ tests it ($C$ at 0.05
+and 0.1 are close, which suggests the parabolic regime is near). At
+$\lvert s\rvert=0.1$ the slope excludes qEW by $16\sigma$, and is $1.9\sigma$
+from $+0.16$ and $0.5\sigma$ from $+0.055$: it confirms a finite,
+$L$-independent $\lambda$, but does not separate the two values of $1/\nu$.
+The collapse with the qKPZ exponents (right panel) gives a single curve,
+but points from different $L$ barely overlap in $x$, so it is a weak
+test. Separating them would need $s\approx0.02$–0.05 with more seeds.
+
 **Conclusion.** With weak disorder correlated along the wall, the
 geometry of the critical wall is that of the qKPZ (directed-percolation)
 class and not qEW: $\zeta_W = 0.62$–0.67 over more than a decade of $l$,
@@ -943,6 +994,129 @@ threshold does not follow: shift and spread of $h_d$ both give
 $1/\nu = 0.685\pm0.02$, far from 0.577. Open: whether this is a
 pre-asymptotic value (the $\zeta_W$ plateau only starts at $l\approx300$)
 or the threshold statistics are set at shorter scales than the geometry.
+§5.10 tests the first option and rules it out.
+
+### 5.10 Does the crossover length set the threshold exponent?
+
+Plan in `docs/plans/aniso_crossover_nu.md`; figures in `results/aniso_nu/`.
+
+**Hypothesis.** The $1/\nu = 0.685$ of §5.9 is pre-asymptotic: the
+$\zeta_W$ plateau starts at $\ell_p\approx130$–300, and a global quantity
+like $\sigma(h_d)$ needs $L/\ell_p$ larger than we reach. Larger $L$ is
+expensive, so we move $\ell_p$ instead. If $1/\nu_\text{eff}$ depends only
+on $L/\ell_p$, block shapes with different $\ell_p$ must give the same
+function of $L/\ell_p$. The aspect ratio of the blocks is the strong
+knob: the tilt curvature near $s=0$ ($\lvert s\rvert\le0.1$, $L=512$ and
+1024) is $h_d''/h_d\approx-4$ for 4×1, $-13$ to $-16$ for 8×1 and
+$-36\pm2.5$ for 16×1, so $\lambda$ grows with the elongation and $\ell_p$
+shrinks.
+
+**Runs.** $\Delta=0.2$, blocks 4×1, 16×1 and, as control, isotropic
+disorder (1×1) at the same $\Delta$; the 8×1 data are those of §5.9.
+$L = 256$, 512, 1024, 2048 with 200 seeds per $L$ (fields dumped for seeds
+1–30), `--tol 1e-5`, $s=0$. Boxes by the $\kappa=20$ rule, recalibrated
+for each shape from $w(L)$ with 10 seeds (`data/aniso_nu/calib_ax*`); for
+1×1, $0.8\times$ the $\kappa=25$ boxes of `data/kappa`:
+
+| blocks | $P$ at $L=256$, 512, 1024, 2048 | $\kappa_\text{eff}=P/\langle w\rangle$ |
+|---|---|---|
+| 1×1 | 88, 210, 498, 1185 | 19–21 |
+| 4×1 | 85, 147, 261, 547 | 15–22 |
+| 8×1 | 74, 113, 200, 271 | 18–20 |
+| 16×1 | 55, 86, 130, 219 | 21–23 |
+
+Scripts (cluster, not versioned): `data/aniso_nu/prod/run.sh` with
+`tasks.txt` (one line per task: shape, $L$, seeds, $P$, $H$, dump), and
+`data/aniso_nu/analyze.sh`, which merges the seeds, runs
+`scripts/local_roughness.py` at thresholds 1.125 and 0.8, and then
+`scripts/shape_nu.py` (fits and figure) and `scripts/zeta_shapes.py`.
+
+**Lengths.** $\ell_\times$ and $\ell_p$ are where $\zeta_W$ (chord) first
+drops below 1.125 and 0.8, at $L=2048$ (table: `lo_table.dat`, with
+errors; the figure marks the first crossing of the mean curve, which gives
+slightly larger values, e.g. 67, 45, 37 for $\ell_\times$ and 274, 150,
+100 for $\ell_p$). Left: $\zeta_W(l)$ at $L=2048$ and 1024; middle and
+right: the anisotropic curves against $l/\ell_\times$ and $l/\ell_p$
+(`scripts/zeta_shapes.py`):
+
+![zeta_W(l) for the four shapes, raw and rescaled by l_x and l_p](../results/aniso_nu/zeta_W_shapes_L2048.png)
+
+| blocks | $\ell_\times$ | $\ell_p$ | plateau |
+|---|---|---|---|
+| 1×1 | (100, 236, 431, 779 for $L$ = 256–2048) | — | none: $\zeta_W>0.8$ up to $l\approx L/2$ |
+| 4×1 | $60\pm4$ | $270\pm170$ | $\zeta_W\approx0.68$–0.75 for $l\gtrsim600$ |
+| 8×1 | $39\pm1$ | $130\pm20$ | $\zeta_W\approx0.6$–0.7 for $l\gtrsim250$ |
+| 16×1 | $36\pm1$ | $93\pm10$ | $\zeta_W\approx0.6$–0.7 for $l\gtrsim200$ |
+
+The isotropic wall is qEW-like at all accessible scales: $\zeta_W$
+decreases slowly from 1.4 to about 1.1 at $l\approx1000$ and only drops
+below 1 when $l$ approaches $L$, so its $\ell_\times$
+grows $\propto L$ and is a finite-size effect. Among the anisotropic
+shapes the crossover moves less than the pilot suggested:
+- *8×1 and 16×1 have nearly the same crossover.* Their curves coincide up
+  to $l\approx30$, $\ell_p$ differs by a factor 1.4–1.5, and rescaled by
+  either $\ell_\times$ or $\ell_p$ they collapse onto one curve that
+  reaches the qKPZ value 0.63.
+- *4×1 crosses over later, but is not a shifted copy.* $\zeta_W$ falls
+  with a smaller slope, does not collapse with the other two under either
+  rescaling, and levels at 0.68–0.75 rather than 0.63 within $L=2048$.
+  Its $\ell_p$ is ill-defined: the curve oscillates around 0.8 for
+  $l\approx200$–600.
+
+**Threshold.** Joint fit of $\langle h_d\rangle = h_\infty + A L^{-1/\nu}$
+and $\sigma(h_d) = B L^{-1/\nu}$, as in §5.9, over $L=256$–2048 for every
+shape (`scripts/shape_nu.py`):
+
+![sigma(h_d) and local slopes for the four shapes](../results/aniso_nu/shape_nu.png)
+
+| blocks | $1/\nu$ (joint) | $\chi^2$ | $\chi^2$ at 0.577 | $\chi^2$ at 0.75 | $\sigma$ only | shift only |
+|---|---|---|---|---|---|---|
+| 1×1 | 0.80 (0.76–0.84) | 5.2/4 | 37.0/5 | 6.9/5 | 0.80 | — |
+| 4×1 | 0.66 (0.63–0.70) | 2.2/4 | 7.7/5 | 8.7/5 | 0.66 | 0.95 (0.67–1.20) |
+| 8×1 | 0.67 (0.63–0.71) | 4.7/4 | 9.7/5 | 9.4/5 | 0.65 | 0.84 (0.69–0.99) |
+| 16×1 | 0.73 (0.70–0.76) | 2.7/4 | 25.5/5 | 3.0/5 | 0.74 | 0.63 (0.50–0.76) |
+
+For 1×1, $\langle h_d\rangle$ does not depend on $L$
+($0.00788\pm0.00001$ at every $L$), so the shift carries no exponent and
+the fit is set by $\sigma$ alone. Local slopes of $\sigma$ between
+successive $L$:
+
+| blocks | 256→512 | 512→1024 | 1024→2048 |
+|---|---|---|---|
+| 1×1 | 0.69 ± 0.13 | 0.91 ± 0.12 | 0.75 ± 0.12 |
+| 4×1 | 0.71 ± 0.12 | 0.64 ± 0.11 | 0.62 ± 0.10 |
+| 8×1 | 0.85 ± 0.13 | 0.63 ± 0.12 | 0.54 ± 0.11 |
+| 16×1 | 0.72 ± 0.12 | 0.61 ± 0.14 | 0.91 ± 0.12 |
+
+**Reading.**
+- *The control works.* With the same boxes, seeds and analysis, isotropic
+  disorder gives $1/\nu = 0.80$, compatible with qEW and excluding 0.577
+  ($\chi^2=37/5$). The intermediate values of the anisotropic shapes are
+  not a bias of the method.
+- *The hypothesis fails.* It predicts 16×1, with the shortest $\ell_p$,
+  closest to 0.577. It is the farthest: $1/\nu = 0.73$, compatible with
+  qEW, and its last local slope is 0.91. 4×1 and 8×1 give the same 0.66
+  although 4×1 crosses over clearly later. 8×1 and 16×1, whose
+  $\zeta_W(l)$ nearly coincide, give $0.67$ and $0.73$ ($0.06\pm0.05$
+  apart, compatible), but neither is near 0.577 at $L/\ell_p$ up to 15–20. Against $L/\ell_p$ (right
+  panel) the local slopes do not collapse: they dip to 0.55–0.65 around
+  $L/\ell_p\approx5$–10 for all three shapes, and 16×1 rises again at
+  $L/\ell_p\approx15$.
+- *Caveats.* The lever arm is short: the two shapes that collapse differ
+  in $\ell_p$ by only 1.5, and 4×1, the one with a clearly longer
+  crossover, has a different $\zeta_W(l)$ and a poorly determined $\ell_p$
+  ($\pm170$). Each local slope has an error of
+  about 0.12, so a slow drift towards 0.577 at $L/\ell_p\gg20$ cannot be
+  excluded. But nothing in the data points to one.
+
+**Conclusion.** At $\Delta=0.2$ the geometry of the 8×1 and 16×1 walls is
+qKPZ, and that of 4×1 approaches it from above within $L\le2048$, while the finite-size exponent of the
+threshold is $0.66$–0.73 and is not ordered by the geometric crossover
+length. So the 0.685 of §5.9 is not explained by $L/\ell_p$ being too
+small. Open: whether the exponent of the threshold is not that of
+directed percolation even though the roughness is, or whether some other,
+longer scale (not $\ell_p$) controls $\sigma(h_d)$, e.g. the finite-size
+scaling of the first blocking path in an $L\times P$ box.
 
 ## 6. Two-crossover model for $\zeta_W(l)$
 

@@ -10,6 +10,17 @@
 // phi_ij by the root of the cubic steady-state equation (dphi_ij/dt=0)
 // closest to its current value, sweeping the lattice with a checkerboard
 // decomposition (two-color updates run in parallel on the GPU).
+//
+// Velocity-driven ensemble (main_vd.cu): the field may also depend on y,
+// h(y) = h - H0*(y - y_c), a parabolic well (spring 2*H0) that holds the
+// wall near y_c, and the disorder may be shifted by row_offset rows,
+// r(x, y + row_offset), a conveyor belt that keeps the wall inside the
+// box while it advances through fresh disorder (set_field_gradient,
+// shift_rows). With H0 = 0 and row_offset = 0 (the default) the code
+// does exactly what it did before. For moving walls the y boundary can
+// also be reflecting (set_reflecting_y): a deep trench of the old phase
+// that the conveyor brings down to row 0 then no longer couples to the
+// top row through the anti-periodic seam.
 #include <thrust/device_ptr.h>
 #include <thrust/device_malloc.h>
 #include <thrust/device_free.h>
@@ -143,19 +154,37 @@ int vieta_solver(float p, float q, float &x1, float &x2, float &x3)
 // deterministic and identical every time the same site is queried. With
 // AX=AY=1 the key is the site index x+Lx*y. It doesn't depend on Ly, so
 // a taller box holds the same sample.
+//
+// y is the row in the lab frame (box row + row_offset, >= 0), so the
+// index is 64-bit. Its high word, nonzero only beyond 2^32 sites, is
+// mixed into the counter's seed word; for the boxes of the
+// force-driven runs it is 0 and the key is the same as ever.
 __device__
-float site_disorder(int x, int y, int Lx, unsigned long disorder_seed)
+float site_disorder(int x, long y, int Lx, unsigned long disorder_seed)
 {
-	int site_index=(x/AX)+(Lx/AX)*(y/AY);
+	unsigned long long site_index=(unsigned long long)(x/AX)+(unsigned long long)(Lx/AX)*(unsigned long long)(y/AY);
+	uint32_t high=uint32_t(site_index>>32);
 	RNG rng;
 	RNG::ctr_type c={{}};
 	RNG::key_type k={{}};
-	c[1]=uint32_t(disorder_seed);
+	c[1]=uint32_t(disorder_seed)^(high*0x9E3779B9u);
 	c[0]=uint32_t(site_index);
 	k[0]=uint32_t(site_index);
 	RNG::ctr_type r = rng(c, k);
 	return AMPDIS*(2.0*u01_open_closed_32_53(r[0])-1.0);
 }
+
+// the external drive as the kernels see it: the field h(y) = h - grad*(y
+// - center) at box row y (grad=0: uniform h, bit-for-bit as before), and
+// the disorder's row offset (box row y holds lab row y + row_offset)
+struct Drive
+{
+	float h, grad, center;
+	long row_offset;
+	bool reflect_y; // y boundary: reflecting (zero gradient) instead of anti-periodic
+	__host__ __device__
+	float field(int y) const { return grad==0.0f ? h : h - grad*(float(y)-center); }
+};
 
 // phi of the right (dir=+1) or left (dir=-1) neighbor of (x,y). Across
 // the x boundary the BC is helical, phi(x+Lx,y) = phi(x,y-tilt): a wall
@@ -183,11 +212,11 @@ struct velocityop
 {
 	int Lx, Ly, tilt;
 	float * phi;
-	float external_field;
+	Drive drive;
 	unsigned long disorder_seed;
 
-	velocityop(float *_phi, int _Lx, int _Ly, int _tilt, float _external_field, unsigned long _disorder_seed):
-	phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),external_field(_external_field),disorder_seed(_disorder_seed){};
+	velocityop(float *_phi, int _Lx, int _Ly, int _tilt, Drive _drive, unsigned long _disorder_seed):
+	phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),drive(_drive),disorder_seed(_disorder_seed){};
 
 	__device__
 	float operator()(int i)
@@ -206,15 +235,17 @@ struct velocityop
 
 		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
 		// wall spans the sample. The neighbor across the seam is "up"
-		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1.
-		if(d_antiperiodic_y && y==0) phi_up*=-1;
-		if(d_antiperiodic_y && y==Ly-1) phi_down*=-1;
+		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1. Reflecting:
+		// the site itself (for the VMC the fixed points are the same).
+		// Periodic (bubble geometry, d_antiperiodic_y = 0): no sign flip.
+		if(y==0) phi_up = drive.reflect_y ? phi_center : (d_antiperiodic_y ? -phi_up : phi_up);
+		if(y==Ly-1) phi_down = drive.reflect_y ? phi_center : (d_antiperiodic_y ? -phi_down : phi_down);
 
 		float laplacian = phi_up+phi_down+phi_right+phi_left-4.0*phi_center;
-		float r = site_disorder(x, y, Lx, disorder_seed);
+		float r = site_disorder(x, y+drive.row_offset, Lx, disorder_seed);
 		float phi4_force = EPSILON0*(R0*(1.0+r)*phi_center - phi_center*phi_center*phi_center);
 
-		return CEL*laplacian + phi4_force + external_field;
+		return CEL*laplacian + phi4_force + drive.field(y);
 	}
 };
 
@@ -225,6 +256,17 @@ struct abs_velocityop
 	abs_velocityop(velocityop _v):v(_v){};
 	__device__
 	float operator()(int i){ return fabsf(v(i)); }
+};
+
+// phi_i + dt*dphi_i/dt (System::euler_step)
+struct euler_update
+{
+	const float *phi;
+	float dt;
+	velocityop v;
+	euler_update(const float *_phi, float _dt, velocityop _v):phi(_phi),dt(_dt),v(_v){};
+	__device__
+	float operator()(int i){ return phi[i]+dt*v(i); }
 };
 
 // new value of a site with current value phi_center, neighbor sum
@@ -259,12 +301,12 @@ struct vmcop
 {
 	int Lx, Ly, tilt;
 	float * phi;
-	float external_field;
+	Drive drive;
 	int color_offset;
 	unsigned long disorder_seed;
 
-	vmcop(float *_phi, int _Lx, int _Ly, int _tilt, float _external_field, int _color_offset, unsigned long _disorder_seed)
-	:phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),external_field(_external_field),color_offset(_color_offset),disorder_seed(_disorder_seed)
+	vmcop(float *_phi, int _Lx, int _Ly, int _tilt, Drive _drive, int _color_offset, unsigned long _disorder_seed)
+	:phi(_phi),Lx(_Lx),Ly(_Ly),tilt(_tilt),drive(_drive),color_offset(_color_offset),disorder_seed(_disorder_seed)
 	{};
 
 	__device__
@@ -286,12 +328,14 @@ struct vmcop
 
 		// anti-periodic BC in y, phi(x,y+Ly)=-phi(x,y): a single domain
 		// wall spans the sample. The neighbor across the seam is "up"
-		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1.
-		if(d_antiperiodic_y && y==0) phi_up*=-1;
-		if(d_antiperiodic_y && y==Ly-1) phi_down*=-1;
+		// (row Ly-1) for y=0 and "down" (row 0) for y=Ly-1. Reflecting:
+		// the site itself (for the VMC the fixed points are the same).
+		// Periodic (bubble geometry, d_antiperiodic_y = 0): no sign flip.
+		if(y==0) phi_up = drive.reflect_y ? phi_center : (d_antiperiodic_y ? -phi_up : phi_up);
+		if(y==Ly-1) phi_down = drive.reflect_y ? phi_center : (d_antiperiodic_y ? -phi_down : phi_down);
 
 		phi[center]=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
-			site_disorder(x, y, Lx, disorder_seed),external_field);
+			site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(y));
 	}
 };
 
@@ -312,7 +356,7 @@ struct vmcop
 #define TILE_EPS 1e-6
 #endif
 __global__
-void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, float external_field, int color_offset,
+void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, Drive drive, int color_offset,
 	unsigned long disorder_seed, const unsigned char *active, unsigned char *changed,
 	unsigned long long *work, float tile_eps)
 {
@@ -331,12 +375,12 @@ void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, float external_field
 	float phi_right=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,1), phi_left=phi_x_neighbor(phi,x,y,Lx,Ly,tilt,-1);
 	float phi_center=phi[center];
 
-	// anti-periodic BC in y (see velocityop)
-	if(d_antiperiodic_y && y==0) phi_up*=-1;
-	if(d_antiperiodic_y && y==Ly-1) phi_down*=-1;
+	// anti-periodic, periodic (bubble) or reflecting BC in y (see velocityop)
+	if(y==0) phi_up = drive.reflect_y ? phi_center : (d_antiperiodic_y ? -phi_up : phi_up);
+	if(y==Ly-1) phi_down = drive.reflect_y ? phi_center : (d_antiperiodic_y ? -phi_down : phi_down);
 
 	float new_phi=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
-		site_disorder(x, y, Lx, disorder_seed),external_field);
+		site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(y));
 	if(new_phi!=phi_center){
 		phi[center]=new_phi;
 		if(fabsf(new_phi-phi_center)>tile_eps) changed[tile]=1;
@@ -424,6 +468,61 @@ struct row_if_sign
 	int operator()(int i){ return phi[i]*sign>0 ? i/Lx : neutral; }
 };
 
+// sign changes along a column closer than this many rows count as one
+// crossing of the wall (a single-site sliver of the other sign is not a
+// branch), see column_geometry
+#ifndef GEOM_MERGE
+#define GEOM_MERGE 2
+#endif
+
+// per column x (one thread each, tilt = 0): the sites whose sign changed
+// from saved to phi (up: phi>0 now and not before, down: the reverse),
+// the first and last row where one did, and the wall along the column
+// now: its crossings (sign changes between rows y-1 and y, the seam pair
+// Ly-1|0 excluded) merged into branches when closer than GEOM_MERGE rows,
+// and the distance between the first and last crossing. Writes 6 ints at
+// out[6*x]: up, down, ymin, ymax, branches, depth (ymin = Ly, ymax = -1
+// without flips).
+struct column_geometry
+{
+	const float *phi, *saved;
+	int *out;
+	int Lx, Ly;
+	column_geometry(const float *_phi, const float *_saved, int *_out, int _Lx, int _Ly):
+	phi(_phi),saved(_saved),out(_out),Lx(_Lx),Ly(_Ly){};
+	__device__
+	void operator()(int x)
+	{
+		int up=0, down=0, ymin=Ly, ymax=-1, branches=0, first=-1, last=-1;
+		bool s_prev=false;
+		for(int y=0;y<Ly;y++){
+			bool s=phi[x+Lx*y]>0, s_old=saved[x+Lx*y]>0;
+			if(s!=s_old){
+				if(s) up++; else down++;
+				ymin=min(ymin,y); ymax=max(ymax,y);
+			}
+			if(y>0 && s!=s_prev){
+				if(last<0 || y-last>GEOM_MERGE) branches++;
+				if(first<0) first=y;
+				last=y;
+			}
+			s_prev=s;
+		}
+		int *o=out+6*x;
+		o[0]=up; o[1]=down; o[2]=ymin; o[3]=ymax; o[4]=branches; o[5]=(first<0 ? 0 : last-first);
+	}
+};
+
+// what changed in one quasi-static step (System::avalanche_geometry)
+struct AvalancheGeometry
+{
+	long long up, down; // sites that became phi>0, phi<=0 (up-down = S; down>0 breaks no-passing)
+	int ell;            // columns with a flipped site: lateral extent of the avalanche
+	int height;         // rows between the lowest and highest flipped site, +1 (0 without flips)
+	int n_mv;           // multivalued columns now (2 or more wall branches: overhangs, bubbles)
+	int depth_max;      // largest distance, in rows, between the first and last crossing of a column
+};
+
 struct is_positive
 {
 	__host__ __device__
@@ -471,6 +570,12 @@ struct wall_radius
 	}
 };
 
+struct is_negative
+{
+	__host__ __device__
+	bool operator()(float x){ return x < 0; }
+};
+
 // initial straight wall y = y_low + tilt*x/Lx (phi=+1 below, -1 above)
 struct tilted_wall
 {
@@ -489,6 +594,7 @@ class System{
 		thrust::device_ptr<float> d_saved; // a copy of phi (save_state/restore_state)
 		thrust::device_ptr<float> d_snap;  // phi some sweeps ago (find_next_metastable)
 		thrust::device_vector<int> d_wall_site_indices; // wall-site indices (detect_wall), sized to fit
+		thrust::device_vector<int> d_colgeo; // per-column output of column_geometry (avalanche_geometry)
 		// active tiles (see vmc_tiles_kernel)
 		bool use_tiles;
 		float tile_eps;
@@ -503,6 +609,15 @@ class System{
 		int L2;   // Lx*Ly
 
 		float external_field;
+		// velocity-driven ensemble (see the top of the file): field
+		// gradient H0 and well center y_c (box rows), and the disorder's
+		// row offset; neg_discarded counts the phi<0 sites shifted out
+		// through the bottom (bubbles left behind), so that the lab-frame
+		// area of the phi>0 phase stays continuous across shifts
+		float field_grad, field_center;
+		long row_offset;
+		bool reflect_y;
+		long long neg_discarded;
 		int total_time;
 		float tolres;
 		bool last_converged; // did the last find_next_metastable converge?
@@ -562,6 +677,9 @@ class System{
 			}
 
 			external_field=0.0;
+			field_grad=0.0f; field_center=0.0f;
+			row_offset=0; neg_discarded=0;
+			reflect_y=false;
 			total_time=0;
 			tolres=TOLRES;
 			last_converged=true;
@@ -679,6 +797,77 @@ class System{
 
 		void set_external_field(float h){ external_field=h; }
 		float get_external_field(){ return external_field; }
+
+		// h(y) = external_field - H0*(y - y_c), y_c in box rows
+		void set_field_gradient(float H0, float y_c)
+		{
+			if(tilt!=0 && H0!=0){
+				std::cout << "ERROR: a field gradient with a tilt is not supported" << std::endl;
+				exit(1);
+			}
+			field_grad=H0; field_center=y_c;
+		}
+		long get_row_offset(){ return row_offset; }
+		// initial offset (before any shift): box row y holds lab row y+R
+		void set_row_offset(long R){ row_offset=R; neg_discarded=0; }
+		void set_reflecting_y(bool r){ reflect_y=r; }
+		Drive drive(){ Drive d={external_field,field_grad,field_center,row_offset,reflect_y}; return d; }
+
+		// conveyor belt: moves the field n rows down, phi(x,y) <- phi(x,y+n),
+		// fills the top n rows with the phase above the wall (-1), and
+		// shifts the disorder and the well center along, so the wall sees
+		// the same medium and the same field: an exact symmetry except for
+		// the new bulk rows, which relax in a few sweeps far from the wall.
+		// n must be a multiple of TILE (keeps tiles and checkerboard colors)
+		void shift_rows(int n)
+		{
+			if(n<=0) return;
+			if(n%TILE!=0 || n>=Ly){
+				std::cout << "ERROR: shift_rows(" << n << "): must be a multiple of " << TILE << " below Ly" << std::endl;
+				exit(1);
+			}
+			long nn=long(n)*Lx;
+			neg_discarded+=thrust::count_if(d_phi,d_phi+nn,is_negative());
+			thrust::copy(d_phi+nn,d_phi+L2,d_snap);
+			thrust::copy(d_snap,d_snap+(L2-nn),d_phi);
+			thrust::fill(d_phi+(L2-nn),d_phi+L2,-1.0f);
+			row_offset+=n;
+			field_center-=n;
+		}
+
+		// area of the phi>0 phase in the lab frame, counting the rows
+		// shifted out (all phi>0 but for neg_discarded sites): with a
+		// single wall it is Lx times its mean height, overhangs and
+		// bubbles included (the quantity conjugate to a uniform field)
+		long long positive_area_lab()
+		{
+			long long n=thrust::count_if(d_phi,d_phi+L2,is_positive());
+			return n+(long long)row_offset*Lx-neg_discarded;
+		}
+
+		// the change of phi since save_state() (no shift_rows in between)
+		// and the wall's branches now, column by column (column_geometry;
+		// assumes tilt = 0)
+		AvalancheGeometry avalanche_geometry()
+		{
+			d_colgeo.resize(6*Lx);
+			thrust::for_each(thrust::make_counting_iterator(0), thrust::make_counting_iterator(Lx),
+				column_geometry(phi_ptr, thrust::raw_pointer_cast(&d_saved[0]),
+					thrust::raw_pointer_cast(d_colgeo.data()), Lx, Ly));
+			std::vector<int> h(6*Lx);
+			thrust::copy(d_colgeo.begin(), d_colgeo.end(), h.begin());
+			AvalancheGeometry g={0,0,0,0,0,0};
+			int ymin=Ly, ymax=-1;
+			for(int x=0;x<Lx;x++){
+				const int *c=&h[6*x];
+				g.up+=c[0]; g.down+=c[1];
+				if(c[0]+c[1]>0){ g.ell++; ymin=std::min(ymin,c[2]); ymax=std::max(ymax,c[3]); }
+				if(c[4]>=2) g.n_mv++;
+				g.depth_max=std::max(g.depth_max,c[5]);
+			}
+			g.height=(ymax<0 ? 0 : ymax-ymin+1);
+			return g;
+		}
 		int get_L(){ return Lx; }
 		int get_Ly(){ return Ly; }
 		int get_total_time(){ return total_time; }
@@ -706,7 +895,7 @@ class System{
 					thrust::for_each(
 						thrust::make_counting_iterator(0),
 						thrust::make_counting_iterator(half_L2),
-						vmcop(phi_ptr,Lx,Ly,tilt,external_field,color_offset,disorder_seed)
+						vmcop(phi_ptr,Lx,Ly,tilt,drive(),color_offset,disorder_seed)
 					);
 				}
 				total_time++;
@@ -727,13 +916,27 @@ class System{
 			{
 				for(int color_offset=0;color_offset<2;color_offset++){
 					cudaMemset(changed,0,ntiles);
-					vmc_tiles_kernel<<<ntiles,TILE*TILE/2>>>(phi_ptr,Lx,Ly,tilt,external_field,color_offset,
+					vmc_tiles_kernel<<<ntiles,TILE*TILE/2>>>(phi_ptr,Lx,Ly,tilt,drive(),color_offset,
 						disorder_seed,active,changed,work,tile_eps);
 					if(sweep==0 && color_offset==0) cudaMemset(active,1,ntiles);
 					else spread_activity<<<(ntiles+255)/256,256>>>(changed,active,Tx,Ty,tilt);
 				}
 				total_time++;
 			}
+		}
+
+		// one explicit Euler step of the real dynamics (main_vdyn.cu),
+		// phi <- phi + dt*dphi/dt with the force of velocityop, all sites
+		// in parallel (Jacobi: the new field goes to d_snap, then the two
+		// buffers swap; d_snap is otherwise only scratch for
+		// find_next_metastable)
+		void euler_step(float dt)
+		{
+			thrust::transform(thrust::make_counting_iterator(0), thrust::make_counting_iterator(L2),
+				d_snap, euler_update(phi_ptr,dt,velocityop(phi_ptr,Lx,Ly,tilt,drive(),disorder_seed)));
+			thrust::swap(d_phi,d_snap);
+			phi_ptr=thrust::raw_pointer_cast(&d_phi[0]);
+			total_time++;
 		}
 
 		// mean residual velocity <dphi/dt>, i.e. the paper's convergence
@@ -744,7 +947,7 @@ class System{
 			return thrust::transform_reduce(
 				thrust::make_counting_iterator(0),
 				thrust::make_counting_iterator(L2),
-				velocityop(phi_ptr,Lx,Ly,tilt,external_field,disorder_seed),
+				velocityop(phi_ptr,Lx,Ly,tilt,drive(),disorder_seed),
 				float(0.0), thrust::plus<float>()
 			)/float(Lx);
 		}
@@ -756,7 +959,7 @@ class System{
 			return thrust::transform_reduce(
 				thrust::make_counting_iterator(0),
 				thrust::make_counting_iterator(L2),
-				abs_velocityop(velocityop(phi_ptr,Lx,Ly,tilt,external_field,disorder_seed)),
+				abs_velocityop(velocityop(phi_ptr,Lx,Ly,tilt,drive(),disorder_seed)),
 				0.0f, thrust::maximum<float>());
 		}
 
@@ -907,6 +1110,15 @@ class System{
 				fout << std::endl;
 			}
 			fout << "\n" << std::endl;
+		}
+
+		// the same for box rows y0..y0+n-1 only (a band around the wall,
+		// for long series of snapshots); read_field(path, Lx) in
+		// scripts/wall_contour.py reads it as an n x Lx field
+		void print_rows_binary(std::ofstream &fout, int y0, int n)
+		{
+			thrust::host_vector<float> h_rows(d_phi+(size_t)Lx*y0,d_phi+(size_t)Lx*(y0+n));
+			fout.write(reinterpret_cast<const char*>(h_rows.data()),sizeof(float)*(size_t)Lx*n);
 		}
 
 		// raw float32 dump of the whole field, row-major (index x+y*Lx, Ly

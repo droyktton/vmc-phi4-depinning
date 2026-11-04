@@ -45,5 +45,40 @@ NVCC=-std=$(STD) $(GENCODE)
 $(TARGET): main.cu misistema.h
 	nvcc $(NVCC) -O2 -I. -o $(TARGET) main.cu $(FLAGS)
 
+# velocity-driven ensemble (main_vd.cu), e.g. make vd AMPDIS=0.3 VD_TARGET=phi4vmc_vd_D0.3
+VD_TARGET=phi4vmc_vd
+
+vd: $(VD_TARGET)
+
+$(VD_TARGET): main_vd.cu misistema.h
+	nvcc $(NVCC) -O2 -I. -o $(VD_TARGET) main_vd.cu $(FLAGS)
+
+# the same at finite velocity, Euler dynamics (main_vdyn.cu), e.g. make vdyn AMPDIS=0.3 VDYN_TARGET=phi4vmc_vdyn_D0.3
+VDYN_TARGET=phi4vmc_vdyn
+
+vdyn: $(VDYN_TARGET)
+
+$(VDYN_TARGET): main_vdyn.cu misistema.h
+	nvcc $(NVCC) -O2 -I. -o $(VDYN_TARGET) main_vdyn.cu $(FLAGS)
+
+# SYCL port for Intel GPUs (misistema_sycl.h; oneAPI icpx + oneDPL), e.g.
+#   module swap gnu13 intel/2025.3.0; module load dpl
+#   make sycl AMPDIS=0.4 TARGET_SYCL=phi4vmc_sycl_D0.4
+# Compiled ahead of time for SYCL_AOT (pvc: Data Center GPU Max); with
+# SYCL_AOT= (empty) it is JIT-compiled instead, so it runs on any SYCL
+# device (e.g. the CPU, with ONEAPI_DEVICE_SELECTOR=opencl:cpu).
+# -fp-model=precise: icpx defaults to fast math, which would change the
+# roots of the cubic and the convergence tests.
+TARGET_SYCL=phi4vmc_sycl
+SYCL_AOT=pvc
+SYCL_TARGETS:=$(if $(SYCL_AOT),-fsycl-targets=spir64_gen -Xsycl-target-backend "-device $(SYCL_AOT)")
+
+sycl: $(TARGET_SYCL)
+
+$(TARGET_SYCL): main.cu misistema_sycl.h
+	icpx -fsycl $(SYCL_TARGETS) -std=c++17 -O2 -fp-model=precise -I. -DVMC_SYCL -x c++ -o $(TARGET_SYCL) main.cu $(FLAGS)
+
 clean:
-	rm -f phi4vmc phi4vmc_D*
+	rm -f phi4vmc phi4vmc_D* phi4vmc_vd* phi4vmc_sycl*
+
+.PHONY: vd vdyn sycl clean

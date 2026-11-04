@@ -1,0 +1,148 @@
+# Quasi-static sweep in Δ: h_d(Δ), avalanches and the pinning-force correlator
+
+## Goal
+Run the quasi-static velocity-driven ensemble (`main_vd.cu`, v → 0⁺) over a grid of disorder strengths Δ, at
+fixed L, for a few spring constants H0. From each run we get:
+
+- **h_d(Δ):** the stationary ⟨F⟩, extrapolated as H0 → 0. The deficit h_d − ⟨F⟩ ∝ L_m^{-1/ν}.
+- **Avalanches:** P(S), τ, and the cutoff S_m = ⟨S²⟩/2⟨S⟩ ~ L_m^{d+ζ}.
+- **The pinning-force correlator:** C(w) = ⟨F(W) F(W+w)⟩_c, with L·C(w) = Δ(w) the renormalized disorder
+  correlator of the FRG. Its width scales as L_m^ζ.
+
+The physics question is whether these change character at some Δ_c, from elastic (qEW: ζ ≈ 1.25,
+τ ≈ 1.11) to plastic depinning.
+
+### Key scale
+Provided L ≫ L_m, the cutoff length is the spring's L_m = sqrt(0.47/H0), not L. The elastic/plastic
+criterion is therefore L_m vs l_o(Δ): l_o ≈ 1500 at Δ = 0.3 and ≈ 100 at Δ = 1.
+
+- If Δ_c moves with H0 as l_o(Δ_c) ≈ L_m, the change is a crossover.
+- If Δ_c stays put, it is a transition.
+
+## Pilot (2026-10-29): what it fixed
+The data are on the cluster in `~/Codigos/vmc-phi4-vdrive/data/pilot_qs/`, and on vader in
+`~/Codigos/vmc-phi4-vdrive/data/pilot_qs` (L = 512) and `data/pilot_qs_L1024` (copied from the
+cluster, L = 1024). All runs are one seed, with H0 = 3e-5
+(L_m = 125) unless stated.
+
+| check | result |
+|---|---|
+| dW convergence | dW = 0.5 and 0.1 give the same ⟨F⟩, sd(F) and number of S ≥ 10 avalanches (to 3–5 digits). dW = 2 already merges 5–8 % of avalanches. **Use dW = 0.5.** |
+| L at fixed L_m | L = 512 and 1024 give the same ⟨F⟩ and S_m. sd(F) ∝ L^{-1/2}. The avalanche rate per row of W is ∝ L, so large L/L_m is cheaper statistics. **Use L = 1024.** |
+| transient | With h_u ≈ h_d, F is stationary from the start. Discard the first 10 % anyway. |
+| no-passing | No S < 0 in any run. |
+| bubbles | No detached φ > 0 or φ < 0 domains in any dumped configuration (19 per run at Δ = 0.3, 1.0, 1.5; L = 512). Isolated sites can't be bistable with c = 1 (p = 3 − r > 0), so nucleation needs a whole weak region. **Check it anyway in production** (see below). |
+| non-convergence | At Δ = 1.5, L = 1024, some steps hit the sweep cap (2000·Lx) with `converged = 0` and S = 0. There are 3, 11 and 41 per ~1000 rows for dW = 0.5, 0.1 and 0.02, i.e. ∝ 1/dW. They are most likely the saddle-node bottleneck when W lands just below an avalanche trigger. The avalanche is counted on the next step, so S is unaffected, but each one costs minutes of GPU. A small dW makes it worse. |
+| cost | There is a floor of about 3000 sweeps per step, even with no avalanche. One step takes ~0.07 s at L = 512² on the GTX 1080, and 0.06–0.1 s at 1024² on the RTX 5070 Ti (node211). |
+
+Avalanche rates (S ≥ 10, L = 1024) are about 0.26 per row of W at Δ = 0.3 and about 0.12 at Δ = 1.5.
+With dW = 0.5, 10⁴ avalanches therefore take ~10⁵ steps, which is a few GPU-hours per seed.
+
+At Δ = 1.5 the drive shows clean stick-slip with system-spanning avalanches. The S_m(L_m) exponent is
+not usable with a few hundred avalanches. A first run gave L_m^{1.05} at Δ = 1.5; longer runs gave
+L_m^{2.4}.
+
+**Avalanche geometry (2026-10-30)** ([`results/pilot_qs`](../../results/pilot_qs/README.md)):
+- d_f ≈ 1.9–2.0 (S ~ ℓ^{d_f}) at every Δ.
+- The anisotropy exponent χ (height ~ ℓ^χ) grows with Δ: about 0.4–0.6 at Δ = 0.3, 0.56–0.75 at
+  Δ = 1.0, and ≈ 0.8 at Δ = 1.5.
+- At Δ = 1.0, the avalanches that create overhangs have a flatter P(S).
+
+**χ(Δ) is the geometric observable to follow in production.**
+
+## Production protocol
+
+| parameter | value |
+|---|---|
+| Δ | 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.85, 1.0, 1.2. Capped at 1.2 until h_nuc(Δ) is known (bubbles, below). |
+| H0 | 1e-4, 3e-5, 1e-5 (L_m ≈ 70, 125, 217) at L = 1024; **3e-6 (L_m ≈ 400) at L = 2048**, smallest Δ first (see below) |
+| L × Ly | 1024 × 1024 for H0 ≥ 1e-5 and 2048 × 2048 for H0 = 3e-6, `--reflect-y`. Keep L ≳ 4 L_m, so that the cutoff is set by the spring and not by L. **Ly = 2048 for Δ ≥ 1 with H0 ≤ 1e-5:** at Δ = 1.5, L_m = 217, single avalanches span 689 rows and the wall hit the top of a 1024 box. At Δ = 1.0, bays already reach 392 rows. |
+| dW | 0.5 |
+| h_u | ≈ h_d(Δ, L) from bisection; it only shortens the transient. Use h_est = 0.008 (Δ/0.2)^{4/3} if unknown (0.0663 measured at Δ = 1). |
+| seeds | 5 |
+| length | ≥ 10⁴ avalanches with S ≥ 10 per (Δ, H0) in total. For C(w), a W travel of ≥ 50 correlation lengths of C(w) (60–100 rows at L_m = 125). Take the larger of the two. |
+| dumps | `--dump-every k` with ~100 configurations per seed (full box: 4 MB each at 1024²) |
+
+**Why larger systems (2026-11-02).** Two reasons push towards larger L_m, and so larger L:
+- *Small Δ:* the Larkin length L_c ~ Δ^{-2/3} grows as Δ decreases, and qEW only shows once
+  L_c ≪ L_m. In the pilot, χ at Δ = 0.3 still grew between L_m = 125 and 217, so these L_m are not yet
+  asymptotic there. This is where L = 2048, H0 = 3e-6 matters most.
+- *Large Δ:* the crossover is controlled by L_m/l_o(Δ), and the plastic side needs L_m ≫ l_o.
+
+| L | largest L_m with L ≳ 4 L_m | H0 |
+|---|---|---|
+| 1024 | ~250 | ≥ 1e-5 |
+| 2048 | ~400–500 | 3e-6 |
+| 4096 | ~1000 | 5e-7 |
+
+A step at L = 2048 costs about 4× one at 1024 (∝ L·Ly), but the avalanche rate per row of W also
+grows ∝ L, which pays back part of it. Ly must grow with L_m too: single avalanches already span 689
+rows at Δ = 1.5, L_m = 217.
+
+Build one binary per Δ on the frontend (it builds for every architecture of the gpu partition):
+
+```bash
+make vd AMPDIS=0.85 VD_TARGET=phi4vmc_vd_D0.85
+```
+
+On vader, force the GTX 1080 architecture: `make vd ARCH=sm_61 ...`. Otherwise the Makefile detects
+the GTX 980 and builds sm_52.
+
+A run, from its output directory:
+
+```bash
+$ROOT/phi4vmc_vd_D0.85 1024 1024 3e-5 <h_u> 0.5 <nsteps> <seed> --reflect-y --dump-every <k>
+```
+
+It writes `vd_seed<s>.dat` and `vdfield_step<k>_seed<s>.bin`. The columns of `vd_seed<s>.dat` are
+`step W u F S sweeps converged ell height Sdown n_mv depth`; the last five, the avalanche geometry and
+the wall's multivalued columns, are described at the top of `main_vd.cu`.
+
+To compile on rocks (10.73.25.223, GPUs on compute-6-*, no queue), load
+`module load gcc/11.1.0-gcc-8.2.0-3lbhz3n cuda/12.2.1-gcc-11.1.0-fvljoe5`: the system gcc 4.8 does not
+work with CUDA 12. The GTX TITAN X on compute-6-2 was about 25× slower than the RTX 2080 Ti on
+compute-6-4.
+
+For job arrays, `scripts/slurm_vdyn.sh` reads the seed from field 9 of each command, which is the
+`main_vdyn.cu` argument order. For `main_vd.cu` the seed is field 8: either make the field
+configurable, or use the small runner of the pilot (`data/pilot_qs/slurm_pilot.sh` on the cluster).
+
+## Analysis
+- `scripts/vdrive_stats.py vd_seed*.dat --skip <n>` computes ⟨F⟩, Var F, C(w) and P(S) per (Δ, H0), and
+  warns about non-converged steps and S < 0.
+- τ comes from a fit of P(S) between S ≈ 10 (below that, single-site flips dominate) and S_m, checked
+  with a collapse P(S) S^τ vs S/S_m.
+- S_m(L_m) gives d + ζ.
+- ζ from geometry: `scripts/vdrive_sq.py` reads the `vdfield_step*` dumps directly.
+- **Avalanche geometry (main observables, together with τ):** with the columns `S` (area, flipped
+  sites), `ell` (lateral extent) and `height`, pool the avalanches with S ≥ 10 of all seeds of a
+  (Δ, H0) into one cloud and get
+  - the fractal dimension d_f from S ~ ℓ^{d_f};
+  - the anisotropy χ from height ~ ℓ^χ (the observable that changed with Δ in the pilot);
+  - P(S) split by whether the avalanche raises n_mv.
+
+  Fit over 8 ≤ ℓ ≤ L_m and compare L_m at fixed Δ. `scripts/pilot_geo_plots.py` (adapt its paths) does
+  all three.
+- Δ(w): rescale L·C(w) by Δ(0) and by its width, then compare the shapes across Δ.
+
+## Checks for every run
+1. `converged == 1` for all steps. Count, and keep a list of, the steps that hit the cap.
+2. No S < 0.
+3. **Bubbles:** in every dump, count the φ > 0 domains not connected to the bulk below the wall, and the
+   φ < 0 domains not connected to the bulk above it, with periodic x:
+   `python3 scripts/bubbles.py <rundirs> --L 1024 --csv bubbles.csv`.
+   - A bubble *ahead* of the wall is nucleation: flag that (Δ, H0) and analyse it separately.
+   - A bubble *behind* is a pocket pinched off and left behind by the wall. That is plasticity, and
+     worth tracking against Δ and L_m.
+
+   In the Δ = 1 fixed-force runs with full-box dumps (`data/vdrive_D1.0_full`, L = 1024, ε = 0.0125
+   and 0.025), 5 of 200 snapshots have bubbles. All of them are behind the wall: 1.7k–24.5k sites,
+   130–490 rows back. None is ahead.
+
+## Open before or alongside production
+- **h_nuc(Δ):** the field at which a uniform φ = −1 state with no wall nucleates domains, compared with
+  h_d(Δ). It sets the largest safe Δ. It needs a uniform initial condition in the driver.
+- **Diagnose the non-converged steps** at Δ = 1.5: dump the field at one such W and see what keeps moving
+  (bubble, marginal site, saddle-node bottleneck).
+- **Optional speed-up:** an adaptive W advance that skips the linear stretches of F(W) where nothing
+  flips. They are most of the steps at large Δ.

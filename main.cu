@@ -66,12 +66,18 @@
 // comparatively expensive; it is opt-in (--with-magjumps) since h_d
 // and the critical configuration are already fully determined and
 // saved by find_depinning_field() on its own.
+// VMC_SYCL: the SYCL port for Intel GPUs (make sycl), else CUDA. First,
+// since oneDPL must be included before the standard library headers.
+#ifdef VMC_SYCL
+#include "misistema_sycl.h"
+#else
+#include "misistema.h"
+#endif
 #include <iostream>
 #include <fstream>
 #include <cstdio>
 #include <string>
 #include <chrono>
-#include "misistema.h"
 
 // --y0 default, and how close (in rows) the critical wall may come to
 // the escape row (legacy) or to Ly (--path) before a WARNING
@@ -175,7 +181,7 @@ float find_depinning_field(float h_low, float h_high, float tol, System *sys, bo
 			std::cout << "WARNING: critical wall within " << WALL_MARGIN << " sites of the escape radius: possibly censored" << std::endl;
 	}
 	// how close the critical wall gets to where it would be cut off
-	thrust::pair<int,int> rows=sys->wall_rows();
+	auto rows=sys->wall_rows();
 	int limit = sys->get_escape_full() ? Ly-1 : sys->get_escape_row();
 	std::cout << "wall rows: bottom=" << rows.first << " top=" << rows.second
 		<< " extent=" << rows.second-rows.first << " margin=" << limit-rows.second
