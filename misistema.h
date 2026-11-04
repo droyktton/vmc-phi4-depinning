@@ -41,6 +41,7 @@
 #include <thrust/execution_policy.h>
 #include <thrust/swap.h>
 #include <thrust/iterator/zip_iterator.h>
+#include <thrust/iterator/permutation_iterator.h>
 #include <cassert>
 #include <algorithm>
 #include <iostream>
@@ -175,15 +176,24 @@ float site_disorder(int x, long y, int Lx, unsigned long disorder_seed)
 }
 
 // the external drive as the kernels see it: the field h(y) = h - grad*(y
-// - center) at box row y (grad=0: uniform h, bit-for-bit as before), and
-// the disorder's row offset (box row y holds lab row y + row_offset)
+// - center) at box row y (grad=0: uniform h, bit-for-bit as before), or,
+// if radial, the cone h(x,y) = h - grad*(r - center) with r the distance
+// of (x,y) from (xc,yc) (main_vb.cu: a bubble held by a radial spring),
+// and the disorder's row offset (box row y holds lab row y + row_offset)
 struct Drive
 {
 	float h, grad, center;
 	long row_offset;
 	bool reflect_y; // y boundary: reflecting (zero gradient) instead of anti-periodic
+	bool radial;
+	float xc, yc;
 	__host__ __device__
-	float field(int y) const { return grad==0.0f ? h : h - grad*(float(y)-center); }
+	float field(int x, int y) const {
+		if(grad==0.0f) return h;
+		if(!radial) return h - grad*(float(y)-center);
+		float dx=float(x)-xc, dy=float(y)-yc;
+		return h - grad*(sqrtf(dx*dx+dy*dy)-center);
+	}
 };
 
 // phi of the right (dir=+1) or left (dir=-1) neighbor of (x,y). Across
@@ -245,7 +255,7 @@ struct velocityop
 		float r = site_disorder(x, y+drive.row_offset, Lx, disorder_seed);
 		float phi4_force = EPSILON0*(R0*(1.0+r)*phi_center - phi_center*phi_center*phi_center);
 
-		return CEL*laplacian + phi4_force + drive.field(y);
+		return CEL*laplacian + phi4_force + drive.field(x,y);
 	}
 };
 
@@ -335,7 +345,7 @@ struct vmcop
 		if(y==Ly-1) phi_down = drive.reflect_y ? phi_center : (d_antiperiodic_y ? -phi_down : phi_down);
 
 		phi[center]=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
-			site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(y));
+			site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(x,y));
 	}
 };
 
@@ -380,7 +390,7 @@ void vmc_tiles_kernel(float *phi, int Lx, int Ly, int tilt, Drive drive, int col
 	if(y==Ly-1) phi_down = drive.reflect_y ? phi_center : (d_antiperiodic_y ? -phi_down : phi_down);
 
 	float new_phi=vmc_site_update(phi_center,phi_up+phi_down+phi_right+phi_left,
-		site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(y));
+		site_disorder(x, y+drive.row_offset, Lx, disorder_seed),drive.field(x,y));
 	if(new_phi!=phi_center){
 		phi[center]=new_phi;
 		if(fabsf(new_phi-phi_center)>tile_eps) changed[tile]=1;
@@ -523,6 +533,27 @@ struct AvalancheGeometry
 	int depth_max;      // largest distance, in rows, between the first and last crossing of a column
 };
 
+// one connected cluster of the sites flipped in a step (System::avalanche_components)
+struct AvalancheComponent
+{
+	long long up, down;   // sites that became phi>0 / phi<=0 (up-down: its contribution to S)
+	double xc, yc;        // centroid (box coordinates, periodic images resolved)
+	double cxx, cyy, cxy; // covariance of the site coordinates about the centroid
+	int span_x, span_y;   // extent in x and y (sites, max - min + 1)
+	double r, theta;      // bubble: polar coordinates of the centroid about the box centre
+	double ell_theta;     // bubble: angular extent times r (lateral, along the wall)
+	double dr;            // bubble: radial extent (max r - min r of its sites, + 1)
+};
+
+// site i changed sign between saved and phi
+struct sign_changed
+{
+	const float *phi, *saved;
+	sign_changed(const float *_phi, const float *_saved):phi(_phi),saved(_saved){};
+	__host__ __device__
+	bool operator()(int i){ return (phi[i]>0)!=(saved[i]>0); }
+};
+
 struct is_positive
 {
 	__host__ __device__
@@ -594,6 +625,7 @@ class System{
 		thrust::device_ptr<float> d_saved; // a copy of phi (save_state/restore_state)
 		thrust::device_ptr<float> d_snap;  // phi some sweeps ago (find_next_metastable)
 		thrust::device_vector<int> d_wall_site_indices; // wall-site indices (detect_wall), sized to fit
+		thrust::device_vector<int> d_flipped; // flipped-site indices (avalanche_components)
 		thrust::device_vector<int> d_colgeo; // per-column output of column_geometry (avalanche_geometry)
 		// active tiles (see vmc_tiles_kernel)
 		bool use_tiles;
@@ -615,6 +647,7 @@ class System{
 		// through the bottom (bubbles left behind), so that the lab-frame
 		// area of the phi>0 phase stays continuous across shifts
 		float field_grad, field_center;
+		bool radial_field; // the cone of set_radial_field_gradient
 		long row_offset;
 		bool reflect_y;
 		long long neg_discarded;
@@ -677,7 +710,7 @@ class System{
 			}
 
 			external_field=0.0;
-			field_grad=0.0f; field_center=0.0f;
+			field_grad=0.0f; field_center=0.0f; radial_field=false;
 			row_offset=0; neg_discarded=0;
 			reflect_y=false;
 			total_time=0;
@@ -811,7 +844,20 @@ class System{
 		// initial offset (before any shift): box row y holds lab row y+R
 		void set_row_offset(long R){ row_offset=R; neg_discarded=0; }
 		void set_reflecting_y(bool r){ reflect_y=r; }
-		Drive drive(){ Drive d={external_field,field_grad,field_center,row_offset,reflect_y}; return d; }
+		// bubble geometry (main_vb.cu): the cone h(r) = external_field -
+		// H0*(r - R_W), r measured from the centre of the box
+		void set_radial_field_gradient(float H0, float R_W)
+		{
+			if(!bubble){
+				std::cout << "ERROR: a radial field gradient needs the bubble geometry (set_bubble)" << std::endl;
+				exit(1);
+			}
+			field_grad=H0; field_center=R_W; radial_field=true;
+		}
+		Drive drive(){
+			Drive d={external_field,field_grad,field_center,row_offset,reflect_y,radial_field,0.5f*Lx,0.5f*Ly};
+			return d;
+		}
 
 		// conveyor belt: moves the field n rows down, phi(x,y) <- phi(x,y+n),
 		// fills the top n rows with the phase above the wall (-1), and
@@ -867,6 +913,100 @@ class System{
 			}
 			g.height=(ymax<0 ? 0 : ymax-ymin+1);
 			return g;
+		}
+
+		// the sites whose sign changed since save_state() (no shift_rows in
+		// between), split into connected clusters: nearest neighbours,
+		// periodic in x, and in y too in the bubble geometry (not across the
+		// anti-periodic or reflecting seam). One quasi-static step can
+		// trigger several independent avalanches (a long wall, a bubble's
+		// perimeter); each cluster is one of them. The flipped sites are
+		// few, so they are copied to the host and joined there (union-find).
+		std::vector<AvalancheComponent> avalanche_components()
+		{
+			const float *sv=thrust::raw_pointer_cast(&d_saved[0]);
+			sign_changed changed(phi_ptr,sv);
+			long n=thrust::count_if(thrust::make_counting_iterator(0),thrust::make_counting_iterator(L2),changed);
+			std::vector<AvalancheComponent> out;
+			if(n==0) return out;
+			d_flipped.resize(n);
+			thrust::copy_if(thrust::make_counting_iterator(0),thrust::make_counting_iterator(L2),d_flipped.begin(),changed);
+			std::vector<int> idx(n);
+			thrust::copy(d_flipped.begin(),d_flipped.end(),idx.begin()); // sorted (copy_if keeps the order)
+			std::vector<float> now(n);
+			thrust::copy(thrust::make_permutation_iterator(d_phi,d_flipped.begin()),
+				thrust::make_permutation_iterator(d_phi,d_flipped.end()),now.begin());
+
+			std::vector<long> parent(n);
+			for(long k=0;k<n;k++) parent[k]=k;
+			auto find=[&](long k){ while(parent[k]!=k){ parent[k]=parent[parent[k]]; k=parent[k]; } return k; };
+			auto at=[&](int i){ auto it=std::lower_bound(idx.begin(),idx.end(),i); return (it!=idx.end() && *it==i) ? long(it-idx.begin()) : -1L; };
+			for(long k=0;k<n;k++){
+				int x=idx[k]%Lx, y=idx[k]/Lx;
+				// right and down neighbours suffice to visit every bond once
+				int nb[2]={-1,-1};
+				nb[0]=(x+1)%Lx+Lx*y;
+				if(y+1<Ly) nb[1]=x+Lx*(y+1);
+				else if(bubble) nb[1]=x;
+				for(int j=0;j<2;j++){
+					if(nb[j]<0) continue;
+					long m=at(nb[j]);
+					if(m<0) continue;
+					long a=find(k), b=find(m);
+					if(a!=b) parent[a]=b;
+				}
+			}
+
+			// sites of each cluster, coordinates unwrapped about its first site
+			std::vector<long> root(n);
+			for(long k=0;k<n;k++) root[k]=find(k);
+			std::vector<long> order(n);
+			for(long k=0;k<n;k++) order[k]=k;
+			std::stable_sort(order.begin(),order.end(),[&](long a,long b){ return root[a]<root[b]; });
+			double bx=0.5*Lx, by=0.5*Ly;
+			for(long s=0;s<n;){
+				long e=s;
+				while(e<n && root[order[e]]==root[order[s]]) e++;
+				AvalancheComponent c={0,0,0,0,0,0,0,0,0,0,0,0,0};
+				int x0=idx[order[s]]%Lx, y0=idx[order[s]]/Lx;
+				std::vector<double> xs(e-s), ys(e-s);
+				for(long k=s;k<e;k++){
+					int i=idx[order[k]], x=i%Lx, y=i/Lx;
+					int dx=x-x0; if(dx>Lx/2) dx-=Lx; if(dx<-Lx/2) dx+=Lx;
+					int dy=y-y0;
+					if(bubble){ if(dy>Ly/2) dy-=Ly; if(dy<-Ly/2) dy+=Ly; }
+					xs[k-s]=x0+dx; ys[k-s]=y0+dy;
+					if(now[order[k]]>0) c.up++; else c.down++;
+				}
+				long m=e-s;
+				double sx=0, sy=0;
+				for(long k=0;k<m;k++){ sx+=xs[k]; sy+=ys[k]; }
+				c.xc=sx/m; c.yc=sy/m;
+				double xmin=1e18, xmax=-1e18, ymin=1e18, ymax=-1e18;
+				for(long k=0;k<m;k++){
+					double dx=xs[k]-c.xc, dy=ys[k]-c.yc;
+					c.cxx+=dx*dx; c.cyy+=dy*dy; c.cxy+=dx*dy;
+					xmin=std::min(xmin,xs[k]); xmax=std::max(xmax,xs[k]);
+					ymin=std::min(ymin,ys[k]); ymax=std::max(ymax,ys[k]);
+				}
+				c.cxx/=m; c.cyy/=m; c.cxy/=m;
+				c.span_x=int(xmax-xmin)+1; c.span_y=int(ymax-ymin)+1;
+				if(bubble){
+					c.r=std::hypot(c.xc-bx,c.yc-by); c.theta=std::atan2(c.yc-by,c.xc-bx);
+					double tmin=1e18, tmax=-1e18, rmin=1e18, rmax=-1e18;
+					for(long k=0;k<m;k++){
+						double r=std::hypot(xs[k]-bx,ys[k]-by);
+						double t=std::atan2(ys[k]-by,xs[k]-bx)-c.theta;
+						if(t>M_PI) t-=2*M_PI; if(t<-M_PI) t+=2*M_PI;
+						tmin=std::min(tmin,t); tmax=std::max(tmax,t);
+						rmin=std::min(rmin,r); rmax=std::max(rmax,r);
+					}
+					c.ell_theta=c.r*(tmax-tmin)+1; c.dr=rmax-rmin+1;
+				}
+				out.push_back(c);
+				s=e;
+			}
+			return out;
 		}
 		int get_L(){ return Lx; }
 		int get_Ly(){ return Ly; }

@@ -34,6 +34,12 @@
 // first and last wall crossing of a column (the deepest overhang/bay).
 // With --dump-every k, the field every k steps as raw float32
 // (vdfield_step<step>_seed<seed>.bin, Lx*Ly, box frame).
+// With --components, the flipped sites of each step split into connected
+// clusters (System::avalanche_components; one step can hold several
+// independent avalanches), one line per cluster in vdaval_seed<seed>.dat:
+//   step S Sdown xc yc cxx cyy cxy span_x span_y
+// with the centroid and the covariance (principal axes) in the lab frame
+// (yc includes the row offset), and the extents in x and y.
 #include <iostream>
 #include <fstream>
 #include <cstdio>
@@ -61,6 +67,7 @@ int main(int argc, char **argv)
 		std::cout << "  --dump-every k save the field every k steps" << std::endl;
 		std::cout << "  --reflect-y    reflecting y boundary instead of anti-periodic (deep trenches left behind)" << std::endl;
 		std::cout << "  --row-offset R the box starts at lab row R (default 0): the wall starts at lab row R+Ly/2" << std::endl;
+		std::cout << "  --components   also write each step's connected clusters of flipped sites (vdaval_seed<s>.dat)" << std::endl;
 		return 1;
 	}
 	int L=atoi(argv[1]), Ly=atoi(argv[2]);
@@ -71,7 +78,7 @@ int main(int argc, char **argv)
 	float F0=h_u;
 	int recenter=64, dump_every=0;
 	long row_offset0=0;
-	bool reflect_y=false;
+	bool reflect_y=false, components=false;
 	for(int i=8;i<argc;i++){
 		std::string flag(argv[i]);
 		if(flag=="--F0" && i+1<argc) F0=atof(argv[++i]);
@@ -79,6 +86,7 @@ int main(int argc, char **argv)
 		else if(flag=="--dump-every" && i+1<argc) dump_every=atoi(argv[++i]);
 		else if(flag=="--row-offset" && i+1<argc) row_offset0=atol(argv[++i]);
 		else if(flag=="--reflect-y") reflect_y=true;
+		else if(flag=="--components") components=true;
 		else{ std::cerr << "ERROR: unknown flag " << flag << std::endl; return 1; }
 	}
 	if(L%TILE!=0 || Ly%TILE!=0 || H0<=0 || recenter<TILE || 2*recenter+2*WALL_MARGIN>=Ly){
@@ -112,6 +120,13 @@ int main(int argc, char **argv)
 		<< " AMPDIS=" << AMPDIS << " AX=" << AX << " AY=" << AY << std::endl;
 	out << "# step W u F S sweeps converged ell height Sdown n_mv depth" << std::endl;
 	out.precision(10);
+	std::ofstream aval;
+	if(components){
+		sprintf(filename,"vdaval_seed%lu.dat",seed);
+		aval.open(filename);
+		aval << "# step S Sdown xc yc cxx cyy cxy span_x span_y" << std::endl;
+		aval.precision(8);
+	}
 
 	for(long step=0;step<=nsteps;step++){
 		if(step>0) W+=dW;
@@ -129,6 +144,10 @@ int main(int argc, char **argv)
 		out << step << " " << W << " " << u << " " << F << " " << new_area-area << " " << sweeps << " " << sys.converged()
 			<< " " << g.ell << " " << g.height << " " << g.down << " " << g.n_mv << " " << g.depth_max << "\n";
 		area=new_area;
+		if(components)
+			for(const AvalancheComponent &c: sys.avalanche_components())
+				aval << step << " " << c.up-c.down << " " << c.down << " " << c.xc << " " << c.yc+sys.get_row_offset() << " "
+					<< c.cxx << " " << c.cyy << " " << c.cxy << " " << c.span_x << " " << c.span_y << "\n";
 
 		if(dump_every>0 && step%dump_every==0){
 			sprintf(filename,"vdfield_step%ld_seed%lu.bin",step,seed);

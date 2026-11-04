@@ -53,6 +53,14 @@ vd: $(VD_TARGET)
 $(VD_TARGET): main_vd.cu misistema.h
 	nvcc $(NVCC) -O2 -I. -o $(VD_TARGET) main_vd.cu $(FLAGS)
 
+# quasi-static bubble held by a radial spring (main_vb.cu), e.g. make vb AMPDIS=0.3 VB_TARGET=phi4vmc_vb_D0.3
+VB_TARGET=phi4vmc_vb
+
+vb: $(VB_TARGET)
+
+$(VB_TARGET): main_vb.cu misistema.h
+	nvcc $(NVCC) -O2 -I. -o $(VB_TARGET) main_vb.cu $(FLAGS)
+
 # the same at finite velocity, Euler dynamics (main_vdyn.cu), e.g. make vdyn AMPDIS=0.3 VDYN_TARGET=phi4vmc_vdyn_D0.3
 VDYN_TARGET=phi4vmc_vdyn
 
@@ -79,6 +87,6 @@ $(TARGET_SYCL): main.cu misistema_sycl.h
 	icpx -fsycl $(SYCL_TARGETS) -std=c++17 -O2 -fp-model=precise -I. -DVMC_SYCL -x c++ -o $(TARGET_SYCL) main.cu $(FLAGS)
 
 clean:
-	rm -f phi4vmc phi4vmc_D* phi4vmc_vd* phi4vmc_sycl*
+	rm -f phi4vmc phi4vmc_D* phi4vmc_vd* phi4vmc_vb* phi4vmc_sycl*
 
-.PHONY: vd vdyn sycl clean
+.PHONY: vd vb vdyn sycl clean
