@@ -676,6 +676,10 @@ class System{
 		float bubble_R0, bubble_Re;
 
 	public:
+		// the sites flipped in the last avalanche_components() call (sorted
+		// indices) and their new phi
+		std::vector<int> flipped_idx;
+		std::vector<float> flipped_phi;
 		unsigned long disorder_seed;
 		float *phi_ptr;
 
@@ -928,6 +932,7 @@ class System{
 			sign_changed changed(phi_ptr,sv);
 			long n=thrust::count_if(thrust::make_counting_iterator(0),thrust::make_counting_iterator(L2),changed);
 			std::vector<AvalancheComponent> out;
+			flipped_idx.clear(); flipped_phi.clear();
 			if(n==0) return out;
 			d_flipped.resize(n);
 			thrust::copy_if(thrust::make_counting_iterator(0),thrust::make_counting_iterator(L2),d_flipped.begin(),changed);
@@ -936,6 +941,7 @@ class System{
 			std::vector<float> now(n);
 			thrust::copy(thrust::make_permutation_iterator(d_phi,d_flipped.begin()),
 				thrust::make_permutation_iterator(d_phi,d_flipped.end()),now.begin());
+			flipped_idx=idx; flipped_phi=now;
 
 			std::vector<long> parent(n);
 			for(long k=0;k<n;k++) parent[k]=k;
@@ -1265,6 +1271,14 @@ class System{
 		// rows of Lx), for
 		// offline contour extraction (scripts/wall_contour.py); fout must be
 		// opened in binary mode
+		// sites with phi > 0, on the host
+		std::vector<char> positive_mask()
+		{
+			thrust::host_vector<float> h_phi(d_phi,d_phi+L2);
+			std::vector<char> m(L2);
+			for(size_t i=0;i<size_t(L2);i++) m[i]=h_phi[i]>0;
+			return m;
+		}
 		void print_field_binary(std::ofstream &fout)
 		{
 			thrust::host_vector<float> h_phi(d_phi,d_phi+L2);

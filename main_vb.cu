@@ -30,6 +30,11 @@
 // longitudinal length of Durin et al.), extents in x and y; polar
 // coordinates of the centroid about the centre; ell_theta = angular
 // extent times r (along the wall) and dr = radial extent (across it).
+// vbflip_seed<seed>.bin, int32, L*L: for each site, the step at which it
+// last became phi>0 (-1: inside the initial disk, before step 0;
+// INT_MAX: outside at the end, or flipped only in the cut last step).
+// The bubble at step t is {flip <= t}, which gives the wall R(theta)
+// at every step, and the space-time clustering of Durin et al.
 // With --dump-every k, the field every k steps as raw float32
 // (vbfield_step<step>_seed<seed>.bin, L*L).
 #include <iostream>
@@ -109,6 +114,13 @@ int main(int argc, char **argv)
 	aval << "# step S Sdown xc yc cxx cyy cxy span_x span_y r theta ell_theta dr" << std::endl;
 	out.precision(10); aval.precision(8);
 
+	const int NEVER=0x7fffffff;
+	std::vector<int> flip(size_t(L)*L,NEVER);
+	{
+		std::vector<char> m=sys.positive_mask();
+		for(size_t i=0;i<m.size();i++) if(m[i]) flip[i]=-1;
+	}
+
 	for(long step=0;step<=nsteps;step++){
 		if(step>0) W+=dA/(2*M_PI*R);
 		sys.set_radial_field_gradient(H0,float(W));
@@ -130,11 +142,19 @@ int main(int argc, char **argv)
 				<< c.cxx << " " << c.cyy << " " << c.cxy << " " << c.span_x << " " << c.span_y << " "
 				<< c.r << " " << c.theta << " " << c.ell_theta << " " << c.dr << "\n";
 		area=new_area;
+		if(!done)
+			for(size_t k=0;k<sys.flipped_idx.size();k++)
+				flip[sys.flipped_idx[k]] = sys.flipped_phi[k]>0 ? int(step) : NEVER;
 
 		if(dump_every>0 && (step%dump_every==0 || done)){
 			sprintf(filename,"vbfield_step%ld_seed%lu.bin",step,seed);
 			std::ofstream fout(filename,std::ios::binary);
 			sys.print_field_binary(fout);
+		}
+		if(done || step==nsteps){
+			sprintf(filename,"vbflip_seed%lu.bin",seed);
+			std::ofstream fout(filename,std::ios::binary);
+			fout.write(reinterpret_cast<const char*>(flip.data()),flip.size()*sizeof(int));
 		}
 		if(done){
 			std::cout << "step " << step << ": the bubble reached the escape radius " << Re << " (R = " << R << "); the last step is cut (converged = -1)" << std::endl;
