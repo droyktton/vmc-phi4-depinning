@@ -1,0 +1,4 @@
+# H0=1e-05 L_m=217; clusters with S>=10; fits over 8<=ell<=L_m
+# Delta seeds n(S>=smin) <F-sigma/2R> sd  tau_MLE(smin..S_m)  1+zeta(ell_PCA)  1+zeta(ell_theta)  chi(dr~ell_theta)  a_PCA  max S
+0.3 50 9272 0.01221 0.00029 0.91 2.003±0.005 1.857±0.004 0.855±0.006 1.823 337251
+1.0 50 5086 0.06324 0.00133 0.94 2.029±0.008 1.900±0.009 0.891±0.009 1.846 484231
